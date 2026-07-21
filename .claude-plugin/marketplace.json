@@ -1,0 +1,13 @@
+{
+  "name": "purandar-ai",
+  "owner": {
+    "name": "CoThink AI"
+  },
+  "plugins": [
+    {
+      "name": "ai-agent",
+      "source": "./",
+      "description": "SRS onboarding, Jira research, spec creation, and React/Spring Boot implementation agents with HIPAA compliance built in."
+    }
+  ]
+}

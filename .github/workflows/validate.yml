@@ -1,0 +1,112 @@
+name: validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Plugin manifests are valid JSON
+        run: |
+          jq empty .claude-plugin/plugin.json
+          jq empty .claude-plugin/marketplace.json
+          jq -e '.name and .version and .description' .claude-plugin/plugin.json > /dev/null
+          jq -e '.name and (.plugins | length > 0)' .claude-plugin/marketplace.json > /dev/null
+
+      - name: Agents and commands have YAML frontmatter
+        run: |
+          status=0
+          for f in agents/*.md commands/*.md; do
+            [ -e "$f" ] || continue
+            if [ "$(head -n 1 "$f")" != "---" ]; then
+              echo "FAIL: $f is missing YAML frontmatter (must start with ---)"
+              status=1
+              continue
+            fi
+            fm=$(awk '/^---$/{n++; next} n==1{print}' "$f")
+            for field in name description; do
+              if ! printf '%s\n' "$fm" | grep -q "^${field}:"; then
+                echo "FAIL: $f frontmatter is missing '${field}:'"
+                status=1
+              fi
+            done
+          done
+          exit $status
+
+      - name: Skills have SKILL.md with frontmatter
+        run: |
+          status=0
+          for d in skills/*/; do
+            [ -d "$d" ] || continue
+            # Skeleton phase: empty skill dirs (only .gitkeep) are allowed
+            if [ -z "$(find "$d" -type f ! -name '.gitkeep' | head -n 1)" ]; then
+              continue
+            fi
+            if [ ! -f "${d}SKILL.md" ]; then
+              echo "FAIL: ${d} has content but no SKILL.md"
+              status=1
+              continue
+            fi
+            if [ "$(head -n 1 "${d}SKILL.md")" != "---" ]; then
+              echo "FAIL: ${d}SKILL.md is missing YAML frontmatter"
+              status=1
+            fi
+          done
+          exit $status
+
+      - name: Hooks are valid and executable
+        run: |
+          if [ -f hooks/hooks.json ]; then
+            jq empty hooks/hooks.json
+            jq -e '.hooks | length > 0' hooks/hooks.json > /dev/null
+          fi
+          status=0
+          for s in hooks/scripts/*.sh; do
+            [ -e "$s" ] || continue
+            bash -n "$s" || { echo "FAIL: $s has syntax errors"; status=1; }
+            [ -x "$s" ] || { echo "FAIL: $s is not executable"; status=1; }
+          done
+          exit $status
+
+      - name: Hook behavior smoke tests
+        run: |
+          status=0
+          run_git() { printf '{"tool_name":"Bash","tool_input":{"command":%s}}' "$(printf '%s' "$1" | jq -Rs .)" | hooks/scripts/block-git-writes.sh 2>/dev/null; echo $?; }
+          run_write() { printf '{"tool_name":"Write","tool_input":{"file_path":"x","content":%s}}' "$(printf '%s' "$1" | jq -Rs .)" | hooks/scripts/guard-writes.sh 2>/dev/null; echo $?; }
+          [ "$(run_git 'git commit -m x')" = "2" ] || { echo "FAIL: git commit not denied"; status=1; }
+          [ "$(run_git 'git push')" = "2" ] || { echo "FAIL: git push not denied"; status=1; }
+          [ "$(run_git 'git push;echo done')" = "2" ] || { echo "FAIL: metachar bypass not denied"; status=1; }
+          [ "$(run_git 'git tag -l && git tag v2')" = "2" ] || { echo "FAIL: tag-creation-after-list not denied"; status=1; }
+          [ "$(run_git 'git status')" = "0" ] || { echo "FAIL: git status wrongly denied"; status=1; }
+          [ "$(run_git 'git tag -l')" = "0" ] || { echo "FAIL: git tag -l wrongly denied"; status=1; }
+          [ "$(run_git 'git grep push')" = "0" ] || { echo "FAIL: git grep push wrongly denied"; status=1; }
+          # Smoke token is assembled at runtime so this file never contains a
+          # token-shaped literal — keeping workflow files inside the secret scan.
+          p='ghp_'; tok="${p}AbCdEfGhIjKlMnOpQrStUvWxYz1234"
+          [ "$(run_write "token = $tok")" = "2" ] || { echo "FAIL: token not denied"; status=1; }
+          s='123-45'; ssn="ssn: ${s}-6789"
+          [ "$(run_write "$ssn")" = "2" ] || { echo "FAIL: SSN not denied"; status=1; }
+          [ "$(run_write 'log.info("id={}", m.getId());')" = "0" ] || { echo "FAIL: clean content wrongly denied"; status=1; }
+          exit $status
+
+      - name: No committed secrets
+        run: |
+          # No .github exclusion: workflow files are a common leak location and
+          # the smoke-test tokens above are runtime-assembled, never literals.
+          if grep -rInE '(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|ATATT[A-Za-z0-9_=-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|sk-[A-Za-z0-9]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY)' \
+            --exclude-dir=.git .; then
+            echo "FAIL: possible committed secret found"
+            exit 1
+          fi
+
+      - name: No machine-specific absolute paths
+        run: |
+          if grep -rInE '(/Users/|/home/|C:\\\\Users)' \
+            --exclude-dir=.git --exclude-dir=.github --include='*.md' --include='*.json' .; then
+            echo "FAIL: machine-specific absolute path found; agents must discover paths at runtime"
+            exit 1
+          fi
