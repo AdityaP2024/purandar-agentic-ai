@@ -4,6 +4,16 @@ All notable changes to the ai-agent plugin. Versioning follows semver via
 `.claude-plugin/plugin.json`; consuming projects pick up releases with
 `/plugin marketplace update`.
 
+## 1.1.0 — Unreleased
+
+### Skills
+- `spring-boot` — new Performance Rules section: measure-first gate (performance-motivated
+  complexity must cite a profile, named hot path, or spec requirement), plus six checkable
+  rules — N+1 queries, collection fetch strategy, batch writes (with the `jdbc.batch_size`
+  and `IDENTITY`-id caveats), caching through the repo's existing stack with cached-PHI
+  treated as PHI at rest (BREAKING without hipaa-skill safeguards), no `parallelStream()`
+  in request paths, and micro-optimizations confined to named hot paths.
+
 ## 1.0.0 — 2026-07-21
 
 Initial release. Marketplace `purandar-ai`, plugin `ai-agent` (install string
