@@ -1,6 +1,6 @@
 ---
 name: spring-boot
-description: read when implementing or reviewing Java/Spring Boot code — layering, SOLID/KISS/YAGNI/DRY as checkable review rules, tech-spec contract fidelity, migrations, and testing standards for the backend-springboot agent
+description: read when implementing or reviewing Java/Spring Boot code — layering, SOLID/KISS/YAGNI/DRY as checkable review rules, tech-spec contract fidelity, migrations, performance rules (N+1, batching, caching, parallelism), and testing standards for the backend-springboot agent
 ---
 
 # Java / Spring Boot Engineering Standards
@@ -141,6 +141,73 @@ public MemberSummaryResponse get(@PathVariable String id) {
 - Every new index is justified by the query it serves, per the Section 6 index table. An index with no named query is a YAGNI finding.
 - Migration file naming and sequencing follow the repo's existing migrations directory — read it before naming yours.
 
+## Performance Rules
+
+Gate first: performance-motivated complexity (caching, async, parallelism, micro-optimization) must cite a profiler result, a named hot path, or a spec-stated performance requirement — otherwise it is a YAGNI finding, same as any other speculative code. The rules below are the exceptions that need no citation: they are correctness-adjacent defects that are findings wherever they appear.
+
+### N+1 queries — a repository call per loop iteration
+
+A query issued inside a loop over a result set, or a lazy association iterated per element, is a finding. Fix with a fetch join, entity graph, or projection — whichever the repo already uses (discover).
+
+```java
+// VIOLATION: one query for the members, then one per member
+List<Member> members = memberRepository.findByPlanId(planId);
+for (Member m : members) {
+    referrals.addAll(referralRepository.findByMemberId(m.getId())); // N queries
+}
+
+// CORRECT: one query resolves the association
+@Query("SELECT m FROM Member m JOIN FETCH m.referrals WHERE m.plan.id = :planId")
+List<Member> findByPlanIdWithReferrals(@Param("planId") String planId);
+```
+
+### Fetch strategy — collections are lazy; eager is justified per-association
+
+`FetchType.EAGER` on a collection association is a finding unless every caller needs it loaded — it taxes each query to serve one. Keep collections lazy and let the specific queries that need the association fetch it (rule above). The converse defect: touching a lazy association outside the owning transaction throws at runtime — resolve it inside the service boundary, never by widening the transaction into the controller or turning on an open-in-view style workaround the repo doesn't already have.
+
+### Batch writes — no per-entity saves in a loop
+
+Saving entities one at a time in a loop is a finding; batch through `saveAll()`. But `saveAll()` alone does not batch: Hibernate batching requires `jdbc.batch_size` (plus ordered inserts/updates) in the discovered configuration, and an `IDENTITY` id strategy disables insert batching entirely. Check the repo's id generation before claiming a batching fix — with `IDENTITY`, the honest options are a sequence-based strategy (a Section 6 data change, not a drive-by) or reporting the constraint.
+
+```java
+// VIOLATION: one INSERT round-trip per entity
+for (ReferralRequest req : requests) {
+    referralRepository.save(toEntity(req));
+}
+
+// CORRECT: single batched write path (with batch_size configured and a
+// batching-compatible id strategy — verify both, don't assume)
+referralRepository.saveAll(requests.stream().map(this::toEntity).toList());
+```
+
+### Caching — through the repo's existing cache, with the hipaa skill in force
+
+Repeated identical expensive reads may be cached with `@Cacheable` — through the cache abstraction and store the repo already has. Introducing a new cache stack (Redis, Caffeine, anything) is new infrastructure: stop-and-surface plus a decision-log entry, never unbidden. Two findings specific to caching:
+
+- A cached read whose underlying data has a write path with no matching eviction (`@CacheEvict`/`@CachePut`) serves stale data — every `@Cacheable` names the write that invalidates it or states why none exists.
+- Cached PHI is PHI at rest in the cache store: the `hipaa` skill's obligations (encrypted store, bounded TTL, access controls) apply to the cache exactly as to the database. `@Cacheable` on a PHI-bearing method with none of that in evidence is a BREAKING finding, not a performance win.
+
+### Parallelism — no `parallelStream()` in request paths
+
+`parallelStream()` executes on the JVM-wide common ForkJoinPool. In a request-serving path that couples every request's latency to the pool's current load — a WARNING even for CPU-bound work, and a finding outright when the stream body does I/O (DB calls, HTTP) since it starves the shared pool. Bulk CPU or long-running work goes to an explicitly configured executor: `@Async` with a named executor bean (discover the repo's executor configuration; `@EnableAsync` with the default unbounded executor is itself a finding).
+
+```java
+// VIOLATION: shared common pool, I/O in the stream body
+List<ReferralResponse> results = ids.parallelStream()
+    .map(referralService::fetchFromPartnerApi) // blocking HTTP on ForkJoinPool
+    .toList();
+
+// CORRECT: bounded, named executor owns the concurrency
+// (executor bean discovered from the repo's async configuration)
+List<CompletableFuture<ReferralResponse>> futures = ids.stream()
+    .map(id -> referralService.fetchFromPartnerApiAsync(id))
+    .toList();
+```
+
+### Micro-optimizations — only in a named hot path
+
+Boxing (`Integer` where `int` serves), string concatenation with `+` inside a loop (use `StringBuilder` — single-expression `+` outside loops is already optimal on modern Java and is NOT a finding), and allocation in tight loops are findings only where a profile or the spec names the path as hot. Flagging them elsewhere is noise, and rewriting readable code for unmeasured speed is a KISS violation — the existing rule already covers it.
+
 ## Testing Standards — tech-spec Section 10
 
 - **Services:** unit-test without a Spring context where possible — plain JUnit with mocks or fakes for collaborators. Booting `@SpringBootTest` for logic plain construction can cover is a finding (slow, obscures the unit).
@@ -192,3 +259,4 @@ log.info("Referral created id={}", referral.getId()); // HIPAA: log surrogate ID
 | 13 | Every AC and Section 9 edge case maps to a test; every Section 5(d) row asserted through the real exception handler. |
 | 14 | Pass the project's coverage gate when one is configured — never lower a threshold, add an exclusion, or delete a quality-gate rule; no gate configured means none is imposed; a shortfall in-scope tests cannot lift is reported, not engineered around. |
 | 15 | No PHI in fixtures or logs; no `System.out`; never weaken a test to make it pass. |
+| 16 | Performance complexity cites a measurement or spec requirement; N+1 queries, unbatched loop writes, un-evicted or unprotected PHI caches, and `parallelStream()` in request paths are findings regardless. |
