@@ -65,7 +65,7 @@ jobs:
             jq -e '.hooks | length > 0' hooks/hooks.json > /dev/null
           fi
           status=0
-          for s in hooks/scripts/*.sh; do
+          for s in hooks/scripts/*.sh scripts/*.sh; do
             [ -e "$s" ] || continue
             bash -n "$s" || { echo "FAIL: $s has syntax errors"; status=1; }
             [ -x "$s" ] || { echo "FAIL: $s is not executable"; status=1; }
@@ -91,6 +91,49 @@ jobs:
           s='123-45'; ssn="ssn: ${s}-6789"
           [ "$(run_write "$ssn")" = "2" ] || { echo "FAIL: SSN not denied"; status=1; }
           [ "$(run_write 'log.info("id={}", m.getId());')" = "0" ] || { echo "FAIL: clean content wrongly denied"; status=1; }
+          exit $status
+
+      - name: Observability hook smoke tests
+        run: |
+          status=0
+          export CLAUDE_PROJECT_DIR="$(mktemp -d)"
+          log="$CLAUDE_PROJECT_DIR/.claude/ai-agent-metrics/events.jsonl"
+          run_log() { printf '%s' "$1" | hooks/scripts/log-events.sh; echo $?; }
+          [ "$(run_log '{"session_id":"s1","tool_name":"Skill","tool_input":{"skill":"spring-boot"}}')" = "0" ] || { echo "FAIL: log hook exited non-zero"; status=1; }
+          grep -q '"event":"skill"' "$log" || { echo "FAIL: skill event not logged"; status=1; }
+          run_log '{"session_id":"s1","tool_name":"Task","tool_input":{"subagent_type":"backend-springboot","prompt":"PROMPT-MUST-NOT-APPEAR"}}' > /dev/null
+          grep -q '"event":"agent"' "$log" || { echo "FAIL: agent spawn not logged"; status=1; }
+          run_log '{"session_id":"s1","tool_name":"Read","tool_input":{"file_path":"skills/hipaa/SKILL.md"}}' > /dev/null
+          grep -q '"event":"read"' "$log" || { echo "FAIL: SKILL.md read not logged"; status=1; }
+          run_log '{"session_id":"s1","tool_name":"Read","tool_input":{"file_path":"src/main/java/App.java"}}' > /dev/null
+          [ "$(wc -l < "$log")" -eq 3 ] || { echo "FAIL: uninteresting read was logged"; status=1; }
+          run_log '{"session_id":"s1","tool_name":"Write","tool_input":{"file_path":"docs/tickets/AB-1/research.md","content":"CONTENT-MUST-NOT-APPEAR"}}' > /dev/null
+          grep -q '"event":"artifact_write"' "$log" || { echo "FAIL: artifact write not logged"; status=1; }
+          if grep -qE 'MUST-NOT-APPEAR' "$log"; then echo "FAIL: content/prompt leaked into log"; status=1; fi
+          [ -f "$CLAUDE_PROJECT_DIR/.claude/ai-agent-metrics/.gitignore" ] || { echo "FAIL: metrics dir is not self-ignoring"; status=1; }
+          rc=$(printf '{"session_id":"s1","tool_name":"Bash","tool_input":{"command":"git push"}}' | hooks/scripts/block-git-writes.sh 2>/dev/null; echo $?)
+          [ "$rc" = "2" ] || { echo "FAIL: git push not denied with metrics enabled"; status=1; }
+          grep -q '"event":"denial"' "$log" && grep -q '"rule":"git-write"' "$log" || { echo "FAIL: git-write denial not logged"; status=1; }
+          rc=$(printf '{"session_id":"s1","tool_name":"Write","tool_input":{"file_path":"x.md","content":"ssn: 123-45-6789"}}' | hooks/scripts/guard-writes.sh 2>/dev/null; echo $?)
+          [ "$rc" = "2" ] || { echo "FAIL: SSN not denied with metrics enabled"; status=1; }
+          grep -q '"hook":"guard-writes"' "$log" || { echo "FAIL: guard-writes denial not logged"; status=1; }
+          if grep -q '123-45-6789' "$log"; then echo "FAIL: denied value leaked into log"; status=1; fi
+          unset CLAUDE_PROJECT_DIR
+          exit $status
+
+      - name: Metrics aggregation smoke test
+        run: |
+          status=0
+          base=$(mktemp -d)
+          mkdir -p "$base/repo-a/docs" "$base/repo-b"
+          printf '| Date | Ticket | Mode | PASS | WARN | FAIL | NO-DATA | Denials | Notes |\n|---|---|---|---|---|---|---|---|---|\n| 2026-08-01 | AB-1 | full | 3 | 1 | 0 | 0 | 0 | clean |\n| 2026-08-02 | AB-2 | full | 4 | 0 | 1 | 0 | 1 | denial seen |\n| malformed |\n' > "$base/repo-a/docs/agent-metrics.md"
+          out=$(scripts/aggregate-metrics.sh "$base/repo-a" "$base/repo-b" "$base/nope")
+          echo "$out" | grep -qE '\| repo-a \| 2 \| 7 \| 1 \| 1 \| 0 \| 1 \|' || { echo "FAIL: repo-a totals wrong"; status=1; }
+          echo "$out" | grep -qE '\| \*\*TOTAL\*\* \| 2 \| 7 \| 1 \| 1 \| 0 \| 1 \|' || { echo "FAIL: TOTAL wrong"; status=1; }
+          echo "$out" | grep -q 'repo-b | no data' || { echo "FAIL: no-data repo not listed"; status=1; }
+          echo "$out" | grep -q 'Malformed rows skipped: 1' || { echo "FAIL: malformed row not counted"; status=1; }
+          echo "$out" | grep -q 'Not a directory' || { echo "FAIL: bad path not reported"; status=1; }
+          head -1 <(echo "$out") | grep -q '# Team Agent Pipeline Metrics' || { echo "FAIL: header missing"; status=1; }
           exit $status
 
       - name: No committed secrets

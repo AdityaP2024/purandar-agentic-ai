@@ -32,7 +32,25 @@ MSG_WRITE="Blocked by the ai-agent plugin: this command contains a git write ope
 MSG_TAG="Blocked by the ai-agent plugin: this command creates, modifies, or deletes a git tag. Tags are release actions the DEVELOPER performs. Listing tags (git tag, git tag -l) is allowed."
 MSG_PR="Blocked by the ai-agent plugin: creating or merging a pull request is the DEVELOPER's action. Agents prepare the code and artifacts; the developer opens the PR."
 
-deny() { printf '%s\n' "$1" >&2; exit 2; }
+# Best-effort observability record for /agent-audit (metadata only — the rule
+# name, never the command). Must never affect the deny itself: every failure
+# is swallowed and the function always returns 0.
+log_denial() {
+  proj=${CLAUDE_PROJECT_DIR:-$(printf '%s' "$payload" | jq -r '.cwd // empty' 2>/dev/null)}
+  [ -n "$proj" ] || return 0
+  dir="$proj/.claude/ai-agent-metrics"
+  mkdir -p "$dir" 2>/dev/null || return 0
+  [ -f "$dir/.gitignore" ] || printf '*\n' > "$dir/.gitignore" 2>/dev/null
+  jq -cn \
+    --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg sid "$(printf '%s' "$payload" | jq -r '.session_id // empty' 2>/dev/null)" \
+    --arg rule "$1" \
+    '{ts: $ts, session: $sid, event: "denial", hook: "block-git-writes", rule: $rule}' \
+    >> "$dir/events.jsonl" 2>/dev/null
+  return 0
+}
+
+deny() { log_denial "$2"; printf '%s\n' "$1" >&2; exit 2; }
 
 # Every shell metacharacter, quote, and backslash becomes a segment separator.
 seps=';&|()<>`$"\'\'''
@@ -59,7 +77,7 @@ while IFS= read -r seg; do
 
   if [ "$prog" = "gh" ]; then
     if [ $# -ge 3 ] && [ "$2" = "pr" ]; then
-      case "$3" in create|merge) deny "$MSG_PR" ;; esac
+      case "$3" in create|merge) deny "$MSG_PR" "gh-pr" ;; esac
     fi
     continue
   fi
@@ -81,13 +99,13 @@ while IFS= read -r seg; do
   sub=$1
   shift
   case "$sub" in
-    commit|push) deny "$MSG_WRITE" ;;
+    commit|push) deny "$MSG_WRITE" "git-write" ;;
     tag)
       [ $# -gt 0 ] || continue  # bare `git tag` lists — read-only
       case "$1" in
         -l|--list|-n*|--contains|--no-contains|--points-at|--merged|--no-merged|--sort=*|--format=*|--column*)
           continue ;;  # read-only listing forms
-        *) deny "$MSG_TAG" ;;
+        *) deny "$MSG_TAG" "git-tag" ;;
       esac ;;
   esac
 done <<EOF

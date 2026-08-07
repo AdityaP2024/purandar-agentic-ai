@@ -22,6 +22,7 @@ when no research file exists. Two approval gates are always mandatory: the spec 
 | `frontend-react` | `/implement` | Implements the frontend (React/TypeScript) half of an approved spec |
 | `backend-springboot` | `/implement` | Implements the backend (Java/Spring Boot) half of an approved spec, backend first |
 | `hipaa-compliance` | `/hipaa-check` | Read-only PHI and audit-coverage review; its entire output is its report |
+| `agent-auditor` | `/agent-audit` | Grades pipeline process (event log) + artifact conformance (templates) into a per-ticket scorecard and a trend row |
 
 ---
 
@@ -356,6 +357,60 @@ commits, and it never puts PHI in its own report.
 Authored for the ai-agent plugin v1.0.0, 2026-07-21. Its review rules are adapted from real
 healthcare implementations, stated generically — nothing in the agent names an organization or
 assumes a specific project.
+
+---
+
+## agent-auditor
+
+### What it knows
+
+- Skills: `shared-standards` (the binding contract for every agent).
+- Templates: `templates/research.md`, `templates/tech-spec.md`, and `templates/decisions.md` —
+  the locked structures artifact conformance is graded against, with required-section lists
+  derived from the template files at run time, never from memory.
+- Data source: the observability event log `.claude/ai-agent-metrics/events.jsonl` (plus its
+  `.old` rotation), written by the plugin's PostToolUse hook from v1.1.0 on — metadata-only
+  records of skill invocations, agent spawns, standards reads, artifact writes, and the safety
+  hooks' denials.
+
+### How to invoke it
+
+- Command: `/agent-audit <TICKET-KEY>`.
+- Natural-language dispatch, from the agent's own examples: "PLAT-421 just shipped — did the
+  agents actually follow the pipeline on it?"; "We want to track over time whether the
+  plugin's agents keep reading the hipaa skill."
+
+### What it will do
+
+1. Preflight: verifies `docs/tickets/<KEY>/` exists (a ticket no pipeline stage has touched is
+   a full stop); locates the event log, falling back to artifact-only mode when it is absent —
+   process checks become NO-DATA, never fabricated.
+2. Gathers evidence: identifies the sessions that worked this ticket from the event log, and
+   collects each one's agent spawns, skill loads, knowledge reads, artifact writes, and hook
+   denials; maps sessions to pipeline stages by what they wrote.
+3. Grades process checks P1–P9 (right agent per stage, right skills loaded, PROJECT_BRIEF read,
+   hipaa skill on PHI-relevant work, zero denials) — every grade cites its log-line evidence or
+   is NO-DATA with the reason.
+4. Grades artifact conformance A1–A5 against the locked templates — structure and completeness
+   only, never content quality (judging spec quality is the spec approval gate's job).
+5. Writes exactly two files: the regenerated scorecard `docs/tickets/<KEY>/audit.md` and one
+   appended row in `docs/agent-metrics.md` (created with its header when absent) — the
+   over-time trend view.
+6. Reports the counts line, every FAIL/WARN with evidence, denials, caveats, and both paths.
+
+### Scope guardrail
+
+Report-only in the strongest sense: a FAIL blocks nothing, gates nothing, and the agent fixes
+nothing — it never edits a pipeline artifact, never touches code, and never runs git (not even
+read-only). It writes exactly two files (the scorecard, regenerated per run, and the
+append-only metrics row) and quotes event-log metadata without re-interpreting it; values that
+pattern-match never-write shapes are reported by pattern name, never by value. It is not a code
+reviewer and not a compliance reviewer — process and structure only.
+
+### Provenance
+
+Authored for the ai-agent plugin v1.1.0, 2026-08-06, as Phase 2 of the observability
+initiative (Phase 1: the metadata-only event-logging hook).
 
 ---
 

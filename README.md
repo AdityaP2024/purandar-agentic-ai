@@ -22,6 +22,7 @@ decision log.
 | `frontend-react` | Implements from the approved spec (React/TypeScript) | Full implementation |
 | `backend-springboot` | Implements from the approved spec (Java/Spring Boot); SOLID/KISS/YAGNI/DRY as review rules; audit-logging expertise | Full implementation |
 | `hipaa-compliance` | Reviews code and specs for PHI violations; severity-ranked report with corrected code | Read-only |
+| `agent-auditor` | Grades how the pipeline handled a ticket: event-log process checks + template conformance | Read-only; writes scorecard + trend row only |
 
 ## Commands
 
@@ -32,6 +33,7 @@ decision log.
 | `/create-spec <KEY>` | Research (or inline lightweight research) to tech spec | `docs/tickets/<KEY>/tech-spec.md` |
 | `/implement <KEY>` | Implements the approved spec with the stack-appropriate agent | Code + tests |
 | `/hipaa-check [path]` | Standalone compliance scan, usable any time | Severity-ranked report |
+| `/agent-audit <KEY>` | Grades pipeline process + artifact conformance for one ticket (report-only) | `docs/tickets/<KEY>/audit.md`, row in `docs/agent-metrics.md` |
 
 `/research-ticket` is optional — `/create-spec` does its own lightweight research
 when no research file exists. Two approval gates are always mandatory: the spec
@@ -64,6 +66,15 @@ enforcement is deliberately NOT a hook: the implementer agents own test coverage
 never lowers a coverage threshold, adds an exclusion, or deletes a quality-gate
 rule), and the consuming project's CI on the pull request is the deterministic
 backstop.
+
+The plugin also observes itself: a PostToolUse hook logs metadata-only events
+(skill loads, agent spawns, standards reads, artifact writes, safety-hook
+denials — never file content, commands, or prompts) to
+`.claude/ai-agent-metrics/events.jsonl` in the consuming repo. `/agent-audit <KEY>`
+turns that log plus the ticket's artifacts into a report-only scorecard
+(`docs/tickets/<KEY>/audit.md`) and appends a trend row to `docs/agent-metrics.md`;
+`scripts/aggregate-metrics.sh <repo>...` merges those trend files across repos
+into one team-wide report for leads.
 
 ## Installation
 
@@ -102,8 +113,11 @@ plugin automatically. Installs use the developer's existing GitHub credentials.
 agents/            agent definitions (YAML frontmatter: name, description with dispatch
                    examples; tool posture is enforced by each agent's body hard rules)
 commands/          slash-command workflows (the orchestration layer)
-hooks/             harness-enforced safety hooks (hooks.json + scripts/): git-write
-                   guard and secret/PHI write guard, active in every consuming repo
+hooks/             harness-enforced hooks (hooks.json + scripts/): git-write guard,
+                   secret/PHI write guard, and the metadata-only observability event
+                   logger, active in every consuming repo
+scripts/           lead-facing tooling: aggregate-metrics.sh merges the per-repo
+                   docs/agent-metrics.md files into one team-wide trend report
 skills/            knowledge layer: shared-standards, hipaa, audit-logging, spring-boot, react
 templates/         locked output formats: research, tech-spec, project-brief, decisions log
 docs/              agent catalog (AGENT-CATALOG.md) and getting-started guide (GETTING-STARTED.md)

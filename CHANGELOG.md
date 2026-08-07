@@ -6,6 +6,37 @@ All notable changes to the ai-agent plugin. Versioning follows semver via
 
 ## 1.1.0 — Unreleased
 
+### Observability
+- `hooks/scripts/log-events.sh` (PostToolUse, matcher `Skill|Task|Agent|Read|Write|Edit`) —
+  appends metadata-only JSONL events to `.claude/ai-agent-metrics/events.jsonl` in the
+  consuming repo: skill invocations, agent spawns, reads of standards/knowledge files
+  (`SKILL.md`, `MEMORY.md`, `CLAUDE.md`, `PROJECT_BRIEF.md`, `decisions.md`, `docs/specs/`,
+  `docs/tickets/`, `templates/`), and writes to pipeline artifacts. Hard rule: never logs
+  file content, command strings, prompts, or tool responses — names and paths only, so
+  nothing secret-shaped or PHI-shaped can land in the log by construction. Never blocks
+  (always exits 0, failures swallowed), fails silent without `jq`, rotates past ~5MB, and
+  the metrics directory self-ignores via a generated `.gitignore`. This is the ground-truth
+  data source for the planned `/agent-audit` command.
+- Both safety hooks now log their denials to the same event log (rule/pattern names only,
+  never the blocked command or matched values) — previously denials left no trace.
+- CI: new "Observability hook smoke tests" step covering event capture, noise filtering,
+  content-leak prevention, denial logging, and the self-ignoring metrics directory.
+- `agent-auditor` agent + `/agent-audit <KEY>` command — per-ticket pipeline audit that
+  cross-references the event log (process: right agent per stage, right skills loaded,
+  PROJECT_BRIEF grounding, hipaa skill on PHI-relevant work, hook denials) with the ticket's
+  artifacts (structure/completeness against the locked templates, never content quality).
+  Every grade is PASS/WARN/FAIL/NO-DATA with cited evidence; missing event log degrades to
+  artifact-only mode with NO-DATA process rows, never fabricated grades. Writes exactly two
+  files: the regenerated scorecard `docs/tickets/<KEY>/audit.md` and one appended trend row in
+  `docs/agent-metrics.md`. Report-only end to end — a FAIL blocks nothing, fixes nothing, and
+  the developer decides what to act on.
+- `scripts/aggregate-metrics.sh` — lead-facing cross-repo aggregation: merges the
+  `docs/agent-metrics.md` trend files from any number of consuming repos into one team-wide
+  markdown report on stdout (per-repo summary with totals, then every audit row newest-first).
+  Plain bash + awk, reads exactly one file per repo, writes nothing, never runs git; repos
+  without data and malformed rows are reported, never silently dropped. CI: syntax/executable
+  checks now cover `scripts/`, plus a behavioral smoke test for the aggregation.
+
 ### Skills
 - `spring-boot` — new Performance Rules section: measure-first gate (performance-motivated
   complexity must cite a profile, named hot path, or spec requirement), plus six checkable
