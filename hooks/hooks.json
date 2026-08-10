@@ -1,6 +1,17 @@
 {
-  "description": "ai-agent plugin hooks. Safety (PreToolUse): deny git write operations (the developer commits, never the plugin) and deny file writes containing secret-shaped or PHI-shaped values — both fail open without jq, defense-in-depth on top of the agents' prompt-level hard rules. Observability (PostToolUse): append metadata-only events (skill invocations, agent spawns, standards reads, artifact writes, plus the safety hooks' denials) to .claude/ai-agent-metrics/events.jsonl for /agent-audit — never blocks, never logs content.",
+  "description": "ai-agent plugin hooks. Safety (PreToolUse): deny git write operations (the developer commits, never the plugin) and deny file writes containing secret-shaped or PHI-shaped values — both fail open without jq, defense-in-depth on top of the agents' prompt-level hard rules. Observability (PostToolUse): append metadata-only events (skill invocations, agent spawns, standards reads, artifact writes, plus the safety hooks' denials) to .claude/ai-agent-metrics/events.jsonl for /agent-audit — never blocks, never logs content. Workspace (SessionStart): idempotently scaffold docs/input-specs/ and docs/output-specs/ in consuming repos — never blocks, guarded against unrelated repos.",
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scaffold-dirs.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Skill|Task|Agent|Read|Write|Edit",

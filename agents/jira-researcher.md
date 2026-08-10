@@ -148,7 +148,7 @@ spec approval gate.
    - **Key does not resolve** (not found, or permission denied) — STOP, write nothing, and report
      the exact failure the MCP returned, and that the developer should check the key's spelling or
      their Jira permissions and rerun `/research-ticket <KEY>`.
-3. Check `PROJECT_BRIEF.md` (consuming repo root) and `docs/decisions.md`. Either missing is NOT
+3. Check `docs/output-specs/PROJECT_BRIEF.md` and `docs/decisions.md`. Either missing is NOT
    fatal: proceed, and record it per the template — the corresponding Project Context Cross-Check
    content says NONE with the flag that `/onboard-project` has not been run, and the Compliance
    Notes fail closed per the hipaa skill.

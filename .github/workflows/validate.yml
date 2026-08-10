@@ -70,6 +70,11 @@ jobs:
             bash -n "$s" || { echo "FAIL: $s has syntax errors"; status=1; }
             [ -x "$s" ] || { echo "FAIL: $s is not executable"; status=1; }
           done
+          for p in scripts/*.py; do
+            [ -e "$p" ] || continue
+            python3 -m py_compile "$p" || { echo "FAIL: $p has syntax errors"; status=1; }
+            [ -x "$p" ] || { echo "FAIL: $p is not executable"; status=1; }
+          done
           exit $status
 
       - name: Hook behavior smoke tests
@@ -107,6 +112,8 @@ jobs:
           grep -q '"event":"read"' "$log" || { echo "FAIL: SKILL.md read not logged"; status=1; }
           run_log '{"session_id":"s1","tool_name":"Read","tool_input":{"file_path":"src/main/java/App.java"}}' > /dev/null
           [ "$(wc -l < "$log")" -eq 3 ] || { echo "FAIL: uninteresting read was logged"; status=1; }
+          run_log '{"session_id":"s1","tool_name":"Read","tool_input":{"file_path":"docs/input-specs/srs.pdf"}}' > /dev/null
+          grep -q 'docs/input-specs/srs.pdf' "$log" || { echo "FAIL: input-specs read not logged"; status=1; }
           run_log '{"session_id":"s1","tool_name":"Write","tool_input":{"file_path":"docs/tickets/AB-1/research.md","content":"CONTENT-MUST-NOT-APPEAR"}}' > /dev/null
           grep -q '"event":"artifact_write"' "$log" || { echo "FAIL: artifact write not logged"; status=1; }
           if grep -qE 'MUST-NOT-APPEAR' "$log"; then echo "FAIL: content/prompt leaked into log"; status=1; fi
@@ -119,6 +126,32 @@ jobs:
           grep -q '"hook":"guard-writes"' "$log" || { echo "FAIL: guard-writes denial not logged"; status=1; }
           if grep -q '123-45-6789' "$log"; then echo "FAIL: denied value leaked into log"; status=1; fi
           unset CLAUDE_PROJECT_DIR
+          exit $status
+
+      - name: Scaffold hook smoke tests
+        run: |
+          status=0
+          # Repo that enables the plugin: scaffolds both dirs with READMEs, prints one note
+          proj=$(mktemp -d)
+          mkdir -p "$proj/.claude"
+          printf '{"enabledPlugins":{"ai-agent@purandar-ai":true}}' > "$proj/.claude/settings.json"
+          out=$(CLAUDE_PROJECT_DIR="$proj" hooks/scripts/scaffold-dirs.sh < /dev/null)
+          [ -d "$proj/docs/input-specs" ] && [ -d "$proj/docs/output-specs" ] || { echo "FAIL: dirs not scaffolded"; status=1; }
+          [ -f "$proj/docs/input-specs/README.md" ] && [ -f "$proj/docs/output-specs/README.md" ] || { echo "FAIL: READMEs missing"; status=1; }
+          printf '%s' "$out" | grep -q 'scaffolded' || { echo "FAIL: creation note not printed"; status=1; }
+          # Idempotent: rerun is silent and never touches existing files
+          printf 'custom' > "$proj/docs/input-specs/README.md"
+          out=$(CLAUDE_PROJECT_DIR="$proj" hooks/scripts/scaffold-dirs.sh < /dev/null)
+          [ -z "$out" ] || { echo "FAIL: rerun not silent"; status=1; }
+          [ "$(cat "$proj/docs/input-specs/README.md")" = "custom" ] || { echo "FAIL: existing README overwritten"; status=1; }
+          # Unrelated repo (no plugin enablement, no docs/): must NOT scaffold
+          bare=$(mktemp -d)
+          CLAUDE_PROJECT_DIR="$bare" hooks/scripts/scaffold-dirs.sh < /dev/null > /dev/null
+          [ ! -d "$bare/docs" ] || { echo "FAIL: scaffolded an unrelated repo"; status=1; }
+          # Existing docs/ tree counts as opt-in even without settings.json
+          mkdir -p "$bare/docs"
+          CLAUDE_PROJECT_DIR="$bare" hooks/scripts/scaffold-dirs.sh < /dev/null > /dev/null
+          [ -d "$bare/docs/input-specs" ] && [ -d "$bare/docs/output-specs" ] || { echo "FAIL: docs-tree repo not scaffolded"; status=1; }
           exit $status
 
       - name: Metrics aggregation smoke test
@@ -134,6 +167,46 @@ jobs:
           echo "$out" | grep -q 'Malformed rows skipped: 1' || { echo "FAIL: malformed row not counted"; status=1; }
           echo "$out" | grep -q 'Not a directory' || { echo "FAIL: bad path not reported"; status=1; }
           head -1 <(echo "$out") | grep -q '# Team Agent Pipeline Metrics' || { echo "FAIL: header missing"; status=1; }
+          exit $status
+
+      - name: xlsx extraction smoke test
+        run: |
+          status=0
+          work=$(mktemp -d)
+          python3 - "$work/fixture.xlsx" <<'PYEOF'
+          import sys, zipfile
+          from datetime import date
+          serial = (date(2025, 8, 1) - date(1899, 12, 30)).days
+          wb = '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Stories" sheetId="1" r:id="rId1"/><sheet name="Billing" sheetId="2" r:id="rId2"/></sheets></workbook>'
+          rels = '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="x" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="x" Target="worksheets/sheet2.xml"/></Relationships>'
+          ss = '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>Module</t></si><si><t>Auth</t></si><si><r><t>rich </t></r><r><t>text</t></r></si><si><t xml:space="preserve">a\tb\nc</t></si></sst>'
+          styles = '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>'
+          s1 = ('<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+                '<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="inlineStr"><is><t>Story</t></is></c><c r="C1" t="inlineStr"><is><t>Pts</t></is></c><c r="D1" t="inlineStr"><is><t>Due</t></is></c></row>'
+                '<row r="2"><c r="A2" t="s"><v>1</v></c><c r="B2" t="s"><v>2</v></c><c r="C2"><v>3</v></c><c r="D2" s="1"><v>%d</v></c></row>'
+                '<row r="3"><c r="A3" t="s"><v>3</v></c><c r="D3" t="b"><v>1</v></c></row>'
+                '<row r="4"><c r="A4" t="inlineStr"><is><t></t></is></c></row>'
+                '</sheetData></worksheet>' % serial)
+          s2 = '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Invoices</t></is></c></row></sheetData></worksheet>'
+          with zipfile.ZipFile(sys.argv[1], "w") as z:
+              z.writestr("xl/workbook.xml", wb)
+              z.writestr("xl/_rels/workbook.xml.rels", rels)
+              z.writestr("xl/sharedStrings.xml", ss)
+              z.writestr("xl/styles.xml", styles)
+              z.writestr("xl/worksheets/sheet1.xml", s1)
+              z.writestr("xl/worksheets/sheet2.xml", s2)
+          PYEOF
+          [ "$(scripts/xlsx-extract.py --list "$work/fixture.xlsx")" = "$(printf 'Stories\nBilling')" ] || { echo "FAIL: --list wrong"; status=1; }
+          out=$(scripts/xlsx-extract.py "$work/fixture.xlsx")
+          echo "$out" | grep -q '^# sheet: Stories$' && echo "$out" | grep -q '^# sheet: Billing$' || { echo "FAIL: sheet headers missing"; status=1; }
+          echo "$out" | grep -q "$(printf 'Auth\trich text\t3\t2025-08-01')" || { echo "FAIL: shared/rich/number/date row wrong"; status=1; }
+          echo "$out" | grep -q "$(printf 'a b\\\\nc\t\t\tTRUE')" || { echo "FAIL: escaping/gap/boolean row wrong"; status=1; }
+          [ "$(scripts/xlsx-extract.py "$work/fixture.xlsx" Billing | wc -l)" -eq 2 ] || { echo "FAIL: single-sheet select wrong"; status=1; }
+          rc=$(scripts/xlsx-extract.py "$work/fixture.xlsx" Nope 2>/dev/null; echo $?)
+          [ "$rc" = "1" ] || { echo "FAIL: missing sheet not an error"; status=1; }
+          printf 'plain' > "$work/notzip.xlsx"
+          rc=$(scripts/xlsx-extract.py "$work/notzip.xlsx" 2>/dev/null; echo $?)
+          [ "$rc" = "1" ] || { echo "FAIL: non-zip not an error"; status=1; }
           exit $status
 
       - name: No committed secrets

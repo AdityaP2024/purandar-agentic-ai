@@ -9,7 +9,7 @@ This card is the single source of truth on PHI for every agent (doc-analyst, jir
 
 ## Project PHI Surface — check first
 
-The rules on this card are universal; WHAT counts as PHI-bearing data in a given repo is not. Before applying these rules, read the **Compliance Profile** section of the repo's `PROJECT_BRIEF.md` (repo root) — it names the PHI-bearing entities, tables, and DTOs for that project. If `PROJECT_BRIEF.md` or its Compliance Profile is missing or incomplete (including unconfirmed categories), you MUST fail closed: treat ALL person-related data (names, contacts, dates, human-facing identifiers, free-text about a person) as PHI. System-generated surrogate IDs (UUIDs, database PKs) remain safe to log even in fail-closed mode.
+The rules on this card are universal; WHAT counts as PHI-bearing data in a given repo is not. Before applying these rules, read the **Compliance Profile** section of the repo's `PROJECT_BRIEF.md` (`docs/output-specs/`) — it names the PHI-bearing entities, tables, and DTOs for that project. If `PROJECT_BRIEF.md` or its Compliance Profile is missing or incomplete (including unconfirmed categories), you MUST fail closed: treat ALL person-related data (names, contacts, dates, human-facing identifiers, free-text about a person) as PHI. System-generated surrogate IDs (UUIDs, database PKs) remain safe to log even in fail-closed mode.
 
 ## The 18 HIPAA PHI Identifiers (ground truth — never invent others)
 

@@ -17,6 +17,7 @@ decision log.
 | Agent | Role | Posture |
 |---|---|---|
 | `doc-analyst` | Reads the SRS, meeting minutes, and design links, distills `PROJECT_BRIEF.md` | Read-heavy, writes brief + decision-log scaffold only |
+| `gap-analyst` | Compares the developer's module-wise user stories (`.xlsx`) against the brief; reports every gap with both sides cited | Read-only; writes the regenerated gap report only |
 | `jira-researcher` | Excavates a Jira ticket: description, all comments, links, attachments, Figma designs | Jira read-only; writes research file only |
 | `spec-writer` | Turns research into a locked-template tech spec | Writes spec only |
 | `frontend-react` | Implements from the approved spec (React/TypeScript) | Full implementation |
@@ -28,7 +29,8 @@ decision log.
 
 | Command | What it does | Generates (in the consuming repo) |
 |---|---|---|
-| `/onboard-project` | Reads `docs/specs/` (SRS, meeting minutes, design links, other documents), distills project knowledge | `PROJECT_BRIEF.md`, scaffolds `docs/decisions.md` |
+| `/onboard-project` | Reads `docs/input-specs/` (SRS, meeting minutes, design links, other documents), distills project knowledge — then auto-runs gap analysis when user-story workbooks are present | `docs/output-specs/PROJECT_BRIEF.md` (module-wise), scaffolds `docs/decisions.md` |
+| `/gap-analysis` | Compares the module-wise user-story `.xlsx` workbooks in `docs/input-specs/` against the brief (report-only); first pass auto-runs after onboarding — run directly to iterate until every module reads ALIGNED | `docs/output-specs/GAP_ANALYSIS.md` (regenerated per run) |
 | `/research-ticket <KEY>` | Full ticket excavation via Atlassian MCP (read-only) | `docs/tickets/<KEY>/research.md` |
 | `/create-spec <KEY>` | Research (or inline lightweight research) to tech spec | `docs/tickets/<KEY>/tech-spec.md` |
 | `/implement <KEY>` | Implements the approved spec with the stack-appropriate agent | Code + tests |
@@ -45,7 +47,8 @@ the shared-standards skill for the canonical gate definitions.
 ## The developer workflow
 
 ```
-Once per project:   settings.json dependency -> drop SRS + MOMs + design links in docs/specs/ -> /onboard-project
+Once per project:   settings.json dependency -> drop SRS + MOMs + design links + user stories (.xlsx) in docs/input-specs/ (auto-created) -> /onboard-project (gap analysis auto-runs when stories are present)
+Story iteration:    review the gap report -> supply missing/corrected inputs -> /gap-analysis -> repeat until every module is ALIGNED
 Once per developer: accept plugin install prompt -> authorize Atlassian connector (OAuth); Figma connector when designs live in Figma
 Per ticket:         [/research-ticket] -> /create-spec -> review spec -> /implement -> review diff -> PR
 ```
@@ -66,6 +69,18 @@ enforcement is deliberately NOT a hook: the implementer agents own test coverage
 never lowers a coverage threshold, adds an exclusion, or deletes a quality-gate
 rule), and the consuming project's CI on the pull request is the deterministic
 backstop.
+
+The plugin also scaffolds its own workspace: a SessionStart hook idempotently
+creates `docs/input-specs/` (the drop zone for everything the pipeline reads —
+SRS, MOMs, design links, module-wise user-story `.xlsx` files) and
+`docs/output-specs/` (where project-level generated artifacts land — the brief
+and the gap-analysis report), each with a README explaining what belongs there.
+It is guarded so a personally-installed plugin never litters unrelated repos:
+it only runs where the repo enables the plugin in `.claude/settings.json` or
+already has a `docs/` tree. If the hook could not run, nothing degrades
+silently: the commands' preflights stop and tell the developer exactly which
+folders to create and what to place in them. Per-ticket outputs stay in
+`docs/tickets/<KEY>/`.
 
 The plugin also observes itself: a PostToolUse hook logs metadata-only events
 (skill loads, agent spawns, standards reads, artifact writes, safety-hook
@@ -114,12 +129,15 @@ agents/            agent definitions (YAML frontmatter: name, description with d
                    examples; tool posture is enforced by each agent's body hard rules)
 commands/          slash-command workflows (the orchestration layer)
 hooks/             harness-enforced hooks (hooks.json + scripts/): git-write guard,
-                   secret/PHI write guard, and the metadata-only observability event
-                   logger, active in every consuming repo
-scripts/           lead-facing tooling: aggregate-metrics.sh merges the per-repo
-                   docs/agent-metrics.md files into one team-wide trend report
+                   secret/PHI write guard, the metadata-only observability event
+                   logger, and the input/output-specs workspace scaffolder, active
+                   in every consuming repo
+scripts/           supporting tooling: aggregate-metrics.sh merges the per-repo
+                   docs/agent-metrics.md files into one team-wide trend report;
+                   xlsx-extract.py (python3 stdlib only) converts the user-story
+                   .xlsx workbooks in docs/input-specs/ to TSV agents can read
 skills/            knowledge layer: shared-standards, hipaa, audit-logging, spring-boot, react
-templates/         locked output formats: research, tech-spec, project-brief, decisions log
+templates/         locked output formats: research, tech-spec, project-brief, gap-report, decisions log
 docs/              agent catalog (AGENT-CATALOG.md) and getting-started guide (GETTING-STARTED.md)
 ```
 

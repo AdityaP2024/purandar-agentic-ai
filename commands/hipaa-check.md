@@ -57,8 +57,8 @@ never does.
       does not, print what the argument resolved to and what to pass instead (a valid path, a
       ticket key with an existing tech-spec, or `all`), then STOP.
 
-   b. **PROJECT_BRIEF.md check — note, do not stop.** If `PROJECT_BRIEF.md` is missing from the
-      consuming repo root, clearly lacks a Compliance Profile section, or that section visibly
+   b. **PROJECT_BRIEF.md check — note, do not stop.** If `docs/output-specs/PROJECT_BRIEF.md` is
+      missing from the consuming repo, clearly lacks a Compliance Profile section, or that section visibly
       contains unconfirmed rows (for example "PHI (presumed — unconfirmed)"), tell the developer
       before launching (the agent independently re-evaluates completeness and may adopt
       fail-closed even when no NOTE was printed):

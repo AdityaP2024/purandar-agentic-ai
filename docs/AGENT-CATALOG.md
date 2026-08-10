@@ -16,7 +16,8 @@ when no research file exists. Two approval gates are always mandatory: the spec 
 
 | Agent | Launched by | Role in one line |
 |---|---|---|
-| `doc-analyst` | `/onboard-project` | Distills the SRS in `docs/specs/` into `PROJECT_BRIEF.md` and scaffolds `docs/decisions.md` |
+| `doc-analyst` | `/onboard-project` | Distills the SRS in `docs/input-specs/` into `PROJECT_BRIEF.md` and scaffolds `docs/decisions.md` |
+| `gap-analyst` | `/onboard-project` (automatic when workbooks are present) and `/gap-analysis` (iterations) | Compares the module-wise user-story workbooks against the brief into the regenerated `GAP_ANALYSIS.md` gap report |
 | `jira-researcher` | `/research-ticket` | Excavates a Jira ticket read-only into `docs/tickets/<KEY>/research.md` |
 | `spec-writer` | `/create-spec` | Turns ticket plus research into the locked-template tech spec, ending at the spec approval gate |
 | `frontend-react` | `/implement` | Implements the frontend (React/TypeScript) half of an approved spec |
@@ -32,7 +33,7 @@ when no research file exists. Two approval gates are always mandatory: the spec 
 
 - Skills: `shared-standards` (the binding contract for every agent) and `hipaa` (the
   18-identifier table that grounds the Compliance Profile).
-- Templates: `templates/project-brief.md` (the locked 10-section output contract) and
+- Templates: `templates/project-brief.md` (the locked 11-section output contract) and
   `templates/decisions.md` (the decision-log scaffold it copies verbatim).
 - Domain expertise: requirements analysis — distilling hundred-page SRS documents into the
   operational brief every downstream agent reads instead of the originals, with every claim
@@ -40,9 +41,9 @@ when no research file exists. Two approval gates are always mandatory: the spec 
 
 ### How to invoke it
 
-- Command: `/onboard-project [docs-dir]` (documents directory defaults to `docs/specs/`).
+- Command: `/onboard-project [docs-dir]` (documents directory defaults to `docs/input-specs/`).
 - Natural-language dispatch, from the agent's own examples: "We just dropped the SRS and the
-  interface control document into docs/specs/. Set this project up for the AI pipeline";
+  interface control document into docs/input-specs/. Set this project up for the AI pipeline";
   "Product shipped a major revision of the requirements spec last sprint, so the project brief
   is stale now"; "We finally confirmed which module implements the authorization entity — the
   brief still says not yet located" (the lightweight Column-Update Mode).
@@ -57,7 +58,7 @@ when no research file exists. Two approval gates are always mandatory: the spec 
    Meeting minutes are read with their dates — when dated minutes and the SRS disagree, the
    latest dated source wins, with both cited — and Figma links are followed read-only via the
    user's Figma connector (or listed as inaccessible with a frame-export request).
-3. Distills the 10 locked sections of `PROJECT_BRIEF.md`; any ambiguous data category is
+3. Distills the 11 locked sections of `PROJECT_BRIEF.md`; any ambiguous data category is
    fail-closed as "PHI (presumed — unconfirmed)" with an open question, never guessed.
 4. Scaffolds `docs/decisions.md` verbatim from the plugin template only if it is absent; an
    existing decision log is never touched.
@@ -69,7 +70,7 @@ when no research file exists. Two approval gates are always mandatory: the spec 
 
 ### Scope guardrail
 
-Writes exactly two files — `PROJECT_BRIEF.md`, and `docs/decisions.md` only when absent — and
+Writes exactly two files — `docs/output-specs/PROJECT_BRIEF.md`, and `docs/decisions.md` only when absent — and
 nothing else. It never edits, moves, or deletes anything in the documents directory, never
 invents a domain fact the sources do not contain, and never overwrites an existing brief
 without the diff-and-approval overwrite gate. It never runs git; the developer commits.
@@ -411,6 +412,67 @@ reviewer and not a compliance reviewer — process and structure only.
 
 Authored for the ai-agent plugin v1.1.0, 2026-08-06, as Phase 2 of the observability
 initiative (Phase 1: the metadata-only event-logging hook).
+
+---
+
+## gap-analyst
+
+### What it knows
+
+- Skills: `shared-standards` (the binding contract for every agent).
+- Templates: `templates/gap-report.md` — the locked 6-section report it regenerates, with the
+  four gap types (MISSING-STORY, UNSOURCED-STORY, CONFLICT, PARTIAL) and the module statuses
+  (ALIGNED, GAPS, NO-STORIES, STORIES-ONLY).
+- Tooling: `scripts/xlsx-extract.py` (python3 stdlib) — the only way it reads the `.xlsx`
+  user-story workbooks; workbook contents are never guessed.
+- Domain expertise: backlog-vs-specification reconciliation — mapping the developer's
+  module-wise user stories onto the brief's Module Briefs (Section 11) through the Domain
+  Glossary, and reporting drift in both directions with both sides cited.
+
+### How to invoke it
+
+- Automatic first pass: `/onboard-project` executes `/gap-analysis` end to end right after the
+  brief is written, whenever `.xlsx` workbooks are present in the documents directory — the
+  developer never runs the first comparison by hand.
+- Command: `/gap-analysis` (no arguments — one run always compares all modules). This is the
+  iteration path: rerun it after each round of corrections until every module reads ALIGNED.
+- Natural-language dispatch, from the agent's own examples: "We dropped the module-wise user
+  stories spreadsheet into docs/input-specs/ — check them against the SRS and the minutes";
+  "We fixed the auth stories after the last gap report — where do we stand now?"
+
+### What it will do
+
+1. Preflight: verifies the brief exists and carries Section 11 (a pre-1.1.0 brief must be
+   regenerated first) and that at least one `.xlsx` workbook is in `docs/input-specs/` —
+   either missing is a full stop pointing at the prerequisite, never an improvised comparison.
+2. Reads the brief completely (side A); extracts every workbook sheet via xlsx-extract.py
+   (side B), discovering column layout from headers and resolving each story's module by
+   Module column, then sheet name, then file name.
+3. Maps story modules to brief modules — exact match, then Domain Glossary synonyms; anything
+   unmappable is reported UNMAPPED with a disposition request, never forced into a bucket.
+4. Compares each mapped module in both directions: brief requirements no story covers
+   (MISSING-STORY / PARTIAL), stories nothing in the brief grounds (UNSOURCED-STORY), and
+   contradictions quoted from both sides (CONFLICT) — direction of fix is always the
+   developer's call.
+5. Regenerates `docs/output-specs/GAP_ANALYSIS.md` whole — one consolidated module-wise
+   report — and reports in chat: verdict with delta against the previous run, the module
+   status table verbatim, top gaps with citations, unmapped modules, and the iteration next
+   step (supply what the gaps name, rerun until every module reads ALIGNED).
+
+### Scope guardrail
+
+Report-only in the strongest sense: a gap blocks nothing, and the agent fixes nothing — it
+never edits a story, the brief, a source document, or code, and never runs git. It writes
+exactly one file (the gap report, regenerated by contract on every explicitly-triggered run).
+The brief is its comparison baseline, never its target: a brief that looks wrong or stale
+becomes an open question pointing at /onboard-project, not an improvised finding. No realistic
+personal-data values from stories or documents ever appear in its output — categories only.
+
+### Provenance
+
+Authored for the ai-agent plugin v1.1.0, 2026-08-10, as Phase 3 of the gap-analysis
+initiative (Phase 1: workspace scaffolding + the input/output-specs split; Phase 2: the
+xlsx extraction tooling).
 
 ---
 

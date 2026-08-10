@@ -43,7 +43,7 @@ case "$tool" in
     ;;
   Read)
     target=$(field '.tool_input.file_path')
-    if printf '%s' "$target" | grep -qE '(SKILL\.md$|MEMORY\.md$|CLAUDE\.md$|PROJECT_BRIEF\.md$|decisions\.md$|docs/specs/|docs/tickets/|templates/)'; then
+    if printf '%s' "$target" | grep -qE '(SKILL\.md$|MEMORY\.md$|CLAUDE\.md$|PROJECT_BRIEF\.md$|decisions\.md$|docs/input-specs/|docs/output-specs/|docs/tickets/|templates/)'; then
       event="read"
     fi
     ;;

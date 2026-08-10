@@ -82,7 +82,7 @@ Read these plugin files first, in this order:
 
 3. Note which pipeline artifacts exist for the ticket: `docs/tickets/<KEY>/research.md`,
    `docs/tickets/<KEY>/tech-spec.md`, any implementation-report file inside the ticket
-   directory (discover — do not assume a name), plus repo-root `PROJECT_BRIEF.md` and
+   directory (discover — do not assume a name), plus `docs/output-specs/PROJECT_BRIEF.md` and
    `docs/decisions.md`.
 
 ## Phase 1 — Evidence Gathering (event log)

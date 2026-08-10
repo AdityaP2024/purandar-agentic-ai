@@ -48,8 +48,8 @@ any part of the spec inline — that is the agent's job, defined in
       unavailable, note it in the launch prompt so the agent skips live verification and records
       the limitation per the shared-standards partial-context protocol.
 
-   c. **PROJECT_BRIEF.md check — warn, do not stop.** If `PROJECT_BRIEF.md` is missing from the
-      consuming repo root, print this warning and continue:
+   c. **PROJECT_BRIEF.md check — warn, do not stop.** If `docs/output-specs/PROJECT_BRIEF.md` is
+      missing from the consuming repo, print this warning and continue:
 
       > WARNING: PROJECT_BRIEF.md not found. spec-writer will fall back to direct repo search for
       > entity mapping, and the hipaa skill's fail-closed rule will treat all person-related data

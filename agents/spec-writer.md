@@ -65,8 +65,8 @@ Read these plugin files first, in this order:
 ## Inputs
 
 The launching command tells you: the ticket key; whether `docs/tickets/<KEY>/research.md` exists;
-whether `docs/tickets/<KEY>/tech-spec.md` already exists; whether `PROJECT_BRIEF.md` exists at
-the consuming repo root; whether the Atlassian MCP is available this session; and whether this
+whether `docs/tickets/<KEY>/tech-spec.md` already exists; whether `docs/output-specs/PROJECT_BRIEF.md`
+exists in the consuming repo; whether the Atlassian MCP is available this session; and whether this
 run is a developer-directed cross-ticket supersession, with the superseded spec's path (absent
 by default). Verify each file fact on disk before relying on it.
 
