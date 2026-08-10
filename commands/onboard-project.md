@@ -1,6 +1,6 @@
 ---
 name: onboard-project
-description: Onboard a project for the AI pipeline via the doc-analyst agent — read every document in the documents directory (default docs/specs/), distill PROJECT_BRIEF.md at the consuming repo root, and scaffold docs/decisions.md if absent. Runs once per project; rerun only after a material SRS change or for a Where Implemented column update, both through the diff-and-approval overwrite gate.
+description: Onboard a project for the AI pipeline via the doc-analyst agent — read every document in the documents directory (default docs/input-specs/), distill docs/output-specs/PROJECT_BRIEF.md, and scaffold docs/decisions.md if absent. When module-wise user-story .xlsx workbooks are present, gap analysis runs automatically right after the brief is written. Runs once per project; rerun only after a material SRS change or for a Where Implemented column update, both through the diff-and-approval overwrite gate.
 argument-hint: [docs-dir]
 ---
 
@@ -14,7 +14,7 @@ any part of `PROJECT_BRIEF.md` or `docs/decisions.md` inline — that is the age
 ## Instructions
 
 1. **Parse the argument.** `$ARGUMENTS` is optional. Trim whitespace. If it is empty, the documents
-   directory is `docs/specs/` (the shared-standards canonical path). Otherwise `$ARGUMENTS` is the
+   directory is `docs/input-specs/` (the shared-standards canonical path). Otherwise `$ARGUMENTS` is the
    documents directory, as a path relative to the consuming repo root. Call the resolved directory
    `<DOCS-DIR>` below.
 
@@ -26,12 +26,17 @@ any part of `PROJECT_BRIEF.md` or `docs/decisions.md` inline — that is the age
       Implemented update reads no documents — it requires only that `PROJECT_BRIEF.md` exists,
       and step 3's stop for a missing brief covers that. Otherwise `<DOCS-DIR>` must exist and
       contain at least one file — of any format; classifying files as readable or unreadable is
-      the agent's Phase 0 job, so do not pre-filter. If the directory is missing or empty, print
+      the agent's Phase 0 job, so do not pre-filter. The one exception: the directory's own
+      `README.md` is the plugin's scaffolding, never a project document — a directory holding
+      nothing but that README counts as empty. If the directory is missing or empty, print
       exactly this — doc-analyst's own Phase 0 stop message, substituting the actual directory —
       and STOP:
 
-      > Onboarding cannot start: <DOCS-DIR> does not exist or contains no documents. Create
-      > <DOCS-DIR>, add the SRS and related project documents, and rerun /onboard-project.
+      > Onboarding cannot start: <DOCS-DIR> does not exist or contains no documents. The plugin's
+      > SessionStart hook normally creates docs/input-specs/ and docs/output-specs/ automatically —
+      > if they are missing, create both folders manually. Then place the required inputs in
+      > <DOCS-DIR>: the SRS, meeting minutes (MOMs), design links or exported frames, and the
+      > module-wise user-story .xlsx workbooks — and rerun /onboard-project.
 
    b. **Regeneration detection.** Check whether `PROJECT_BRIEF.md` exists at the consuming repo
       root. If it does, tell the developer now that regeneration rules apply: the agent will build
@@ -58,7 +63,7 @@ any part of `PROJECT_BRIEF.md` or `docs/decisions.md` inline — that is the age
    everything outside the Section 3 column is byte-identical. Column-Update Mode requires an
    existing `PROJECT_BRIEF.md`; if step 2b found none, print this and STOP:
 
-   > Cannot update the Where Implemented column: PROJECT_BRIEF.md does not exist at the repo root.
+   > Cannot update the Where Implemented column: docs/output-specs/PROJECT_BRIEF.md does not exist.
    > Run /onboard-project (full onboarding) first.
 
 4. **Report the mode before launching.** One short block, so the developer knows what is about to
@@ -77,8 +82,8 @@ any part of `PROJECT_BRIEF.md` or `docs/decisions.md` inline — that is the age
    precisely:
 
    - the documents directory `<DOCS-DIR>` (the agent uses it everywhere its definition says
-     `docs/specs/` and names it in Sections 9 and 10 of the brief);
-   - whether `PROJECT_BRIEF.md` already exists at the consuming repo root (Phase 4 overwrite gate
+     `docs/input-specs/` and names it in Sections 9 and 10 of the brief);
+   - whether `docs/output-specs/PROJECT_BRIEF.md` already exists in the consuming repo (Phase 4 overwrite gate
      applies if so);
    - whether `docs/decisions.md` already exists (scaffold copied verbatim only if absent; an
      existing file left untouched);
@@ -110,7 +115,7 @@ any part of `PROJECT_BRIEF.md` or `docs/decisions.md` inline — that is the age
    nothing-was-written statement instead. When a brief WAS written, close with exactly this
    instruction:
 
-   > PROJECT_BRIEF.md is at the repo root; docs/decisions.md was scaffolded if it was absent.
+   > PROJECT_BRIEF.md is at docs/output-specs/PROJECT_BRIEF.md; docs/decisions.md was scaffolded if it was absent.
    > 1. Review and verify the Compliance Profile (Section 5) now — an incomplete profile creates
    >    exposure, an overbroad one creates review noise. Until you confirm it, the fail-closed
    >    rule stays active: every agent treats all person-related data in this system as PHI.
@@ -121,3 +126,18 @@ any part of `PROJECT_BRIEF.md` or `docs/decisions.md` inline — that is the age
    > 3. Commit PROJECT_BRIEF.md and docs/decisions.md — every other agent in the pipeline reads
    >    them instead of the original documents.
    > Next step: /research-ticket <KEY> or /create-spec <KEY> for your first ticket.
+
+8. **Chain into gap analysis — automatic.** This step runs ONLY when `PROJECT_BRIEF.md` was
+   actually written this run (full onboarding, or an approved regeneration overwrite). It never
+   runs after Column-Update Mode, a keep/abort decision at the overwrite gate, or a stopped run.
+
+   - Check `<DOCS-DIR>` for `.xlsx` user-story workbooks.
+   - If at least one exists: print one line — "Module-wise user stories detected ({n} workbook(s))
+     — running gap analysis automatically." — then execute the `/gap-analysis` command
+     (`${CLAUDE_PLUGIN_ROOT}/commands/gap-analysis.md`) end to end exactly as if the developer had
+     run it: its preflights, the gap-analyst launch, the verbatim relay, and its closing. The
+     developer runs `/gap-analysis` directly only for the LATER iterations (after supplying
+     corrections), never for this first pass.
+   - If none exists: close with exactly this line instead — "No user-story workbooks (.xlsx)
+     found in <DOCS-DIR>. When you drop the module-wise user stories there, run /gap-analysis to
+     validate them against the brief."

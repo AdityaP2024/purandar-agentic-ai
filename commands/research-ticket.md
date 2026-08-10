@@ -44,8 +44,8 @@ design intent, a Sub-task whose requirements live on the parent, or a web of lin
       > connector (claude.ai connector settings, or /mcp in an interactive session), then rerun
       > /research-ticket <KEY>.
 
-   b. **PROJECT_BRIEF.md check — warn, do not stop.** If `PROJECT_BRIEF.md` is missing from the
-      consuming repo root, print this warning and continue:
+   b. **PROJECT_BRIEF.md check — warn, do not stop.** If `docs/output-specs/PROJECT_BRIEF.md` is
+      missing from the consuming repo, print this warning and continue:
 
       > WARNING: PROJECT_BRIEF.md not found. jira-researcher will record the Project Context
       > Cross-Check as NONE and flag that /onboard-project has not been run, and the hipaa skill's

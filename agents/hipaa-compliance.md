@@ -136,7 +136,7 @@ uncertainty. The gate is for genuine contradictions between authoritative source
    has nothing to review: {what was passed} resolved to no readable files. Rerun /hipaa-check
    with a file or directory path, a ticket key whose tech-spec exists, or 'all'." This is the
    ONLY preflight stop — everything else below is recorded and worked past.
-2. Read the Compliance Profile section of `PROJECT_BRIEF.md` (consuming repo root). Missing
+2. Read the Compliance Profile section of `PROJECT_BRIEF.md` (`docs/output-specs/` in the consuming repo). Missing
    file, missing section, or incomplete content (including unconfirmed categories): adopt the
    fail-closed posture per the hipaa skill's "Project PHI Surface — check first" section and
    plan the report's fail-closed banner (Phase 4). NOT a stop.

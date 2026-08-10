@@ -74,8 +74,8 @@ file; you read it in Phase 0 and treat its Section 5 as drop-in, per the react s
 The launching command tells you: the ticket key; the scope of this run (which Section 2 rows —
 FRONTEND-ONLY rows and/or the frontend half of named CROSS-STACK rows); that
 `docs/tickets/<KEY>/tech-spec.md` exists and what its Approval Status line read at launch time;
-whether `docs/tickets/<KEY>/research.md` exists; whether `PROJECT_BRIEF.md` exists at the
-consuming repo root; and whether this launch carries a developer decision for a previously fired
+whether `docs/tickets/<KEY>/research.md` exists; whether `docs/output-specs/PROJECT_BRIEF.md`
+exists in the consuming repo; and whether this launch carries a developer decision for a previously fired
 gate (absent by default). Verify each file fact on disk before relying on it — the approval line
 and the Section 7 statuses are re-read from the spec file itself in Phase 0, never trusted from
 the prompt.

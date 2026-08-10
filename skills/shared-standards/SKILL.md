@@ -68,7 +68,7 @@ When any source is inaccessible — a Jira field, comment thread, attachment, li
 2. Proceed with what IS available.
 3. Flag every conclusion that depends on the gap: "based on the description only; comments were inaccessible".
 
-Figma links are the canonical design-source case: frames behind a Figma URL are readable ONLY through the user's Figma connector — per-user OAuth, read-only, the same access model as Jira via the Atlassian connector. When the connector is unavailable, the link is an inaccessible source: record the URL, and make the fallback request concrete — ask the developer to export the referenced frames as PNG or PDF (into `docs/specs/`, or attached to the ticket); image exports are then read visually like any attachment. NEVER infer design intent from a URL's text, and NEVER substitute remembered designs from similar screens.
+Figma links are the canonical design-source case: frames behind a Figma URL are readable ONLY through the user's Figma connector — per-user OAuth, read-only, the same access model as Jira via the Atlassian connector. When the connector is unavailable, the link is an inaccessible source: record the URL, and make the fallback request concrete — ask the developer to export the referenced frames as PNG or PDF (into `docs/input-specs/`, or attached to the ticket); image exports are then read visually like any attachment. NEVER infer design intent from a URL's text, and NEVER substitute remembered designs from similar screens.
 
 NEVER silently degrade. NEVER use hidden fallbacks (alternate APIs, cached guesses, invented content). Missing context is reported, not papered over.
 
@@ -124,8 +124,10 @@ Everything generated is committed to the **consuming repo** at these canonical p
 
 | Artifact | Path |
 |---|---|
-| SRS input documents | `docs/specs/` |
-| Project brief | `PROJECT_BRIEF.md` (repo root) |
+| SRS input documents | `docs/input-specs/` |
+| User-story workbooks | `docs/input-specs/*.xlsx` (gap-analysis inputs, never brief sources) |
+| Project brief | `docs/output-specs/PROJECT_BRIEF.md` |
+| Gap report | `docs/output-specs/GAP_ANALYSIS.md` (regenerated whole per run) |
 | Ticket research | `docs/tickets/<KEY>/research.md` |
 | Tech spec | `docs/tickets/<KEY>/tech-spec.md` |
 | Decision log | `docs/decisions.md` (append-only) |
@@ -140,8 +142,8 @@ Overwriting any existing generated artifact requires diff + approval (Hard Rule 
 
 ## Roster (exact names)
 
-Agents: `doc-analyst`, `jira-researcher`, `spec-writer`, `frontend-react`, `backend-springboot`, `hipaa-compliance`.
-Commands: `/onboard-project`, `/research-ticket`, `/create-spec`, `/implement`, `/hipaa-check`.
+Agents: `doc-analyst`, `gap-analyst`, `jira-researcher`, `spec-writer`, `frontend-react`, `backend-springboot`, `hipaa-compliance`, `agent-auditor`.
+Commands: `/onboard-project`, `/gap-analysis`, `/research-ticket`, `/create-spec`, `/implement`, `/hipaa-check`, `/agent-audit`.
 Use these exact names in all cross-references — never variants.
 
 ## Self-Check Before Reporting Done

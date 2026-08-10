@@ -88,7 +88,7 @@ reviews and commits.
       implement and no agent is launched.
 
    e. **Context checks — inform, do not stop.** Check whether `docs/tickets/<KEY>/research.md`
-      exists, whether `PROJECT_BRIEF.md` exists at the consuming repo root, and whether
+      exists, whether `docs/output-specs/PROJECT_BRIEF.md` exists in the consuming repo, and whether
       `docs/decisions.md` exists; each fact goes into the launch prompts. If `PROJECT_BRIEF.md`
       is missing, print this warning and continue:
 
@@ -125,7 +125,7 @@ reviews and commits.
    - the ticket key `<KEY>` and the spec path `docs/tickets/<KEY>/tech-spec.md` (Section 13
      verified APPROVED at preflight; the agent re-verifies at its own Phase 0);
    - whether `docs/tickets/<KEY>/research.md` exists;
-   - whether `PROJECT_BRIEF.md` exists at the consuming repo root (fail-closed PHI handling if
+   - whether `docs/output-specs/PROJECT_BRIEF.md` exists in the consuming repo (fail-closed PHI handling if
      not) and whether `docs/decisions.md` exists;
    - whether the Atlassian MCP is available this session — informational only; the implementers
      do not need Jira and never block on it;

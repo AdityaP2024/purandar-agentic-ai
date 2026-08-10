@@ -58,6 +58,20 @@ while [ $i -lt ${#patterns[@]} ]; do
 done
 
 if [ -n "$hits" ]; then
+  # Best-effort observability record for /agent-audit (pattern NAMES only,
+  # never the matched values or content). Must never affect the deny itself:
+  # every failure is swallowed.
+  proj=${CLAUDE_PROJECT_DIR:-$(printf '%s' "$payload" | jq -r '.cwd // empty' 2>/dev/null)}
+  if [ -n "$proj" ] && mkdir -p "$proj/.claude/ai-agent-metrics" 2>/dev/null; then
+    dir="$proj/.claude/ai-agent-metrics"
+    [ -f "$dir/.gitignore" ] || printf '*\n' > "$dir/.gitignore" 2>/dev/null
+    jq -cn \
+      --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      --arg sid "$(printf '%s' "$payload" | jq -r '.session_id // empty' 2>/dev/null)" \
+      --arg rule "${hits# }" \
+      '{ts: $ts, session: $sid, event: "denial", hook: "guard-writes", rule: $rule}' \
+      >> "$dir/events.jsonl" 2>/dev/null
+  fi
   echo "Blocked by the ai-agent plugin: the content being written to $file matches never-write patterns:$hits. Secrets and real-looking PHI must never be written to any file — use obviously-fake placeholders (per the hipaa skill: member-0001, TEST_LASTNAME; an all-zero dashed SSN is still blocked, use SSN-PLACEHOLDER) and retry. The matched values are intentionally not echoed here." >&2
   exit 2
 fi

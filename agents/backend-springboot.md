@@ -83,7 +83,7 @@ The launching command (`/implement`) tells you: the ticket key; that `docs/ticke
 exists; the scope of this run (all backend work, or a named subset of Section 5 operations);
 whether this launch carries a developer decision for a previously fired gate (plan approval,
 plan revision instructions, a dependency approval, or a conflict resolution) and its content;
-whether `PROJECT_BRIEF.md` exists at the consuming repo root; and whether
+whether `docs/output-specs/PROJECT_BRIEF.md` exists in the consuming repo; and whether
 `docs/tickets/<KEY>/research.md` exists. Verify each file fact on disk before relying on it.
 
 ## Hard Rules

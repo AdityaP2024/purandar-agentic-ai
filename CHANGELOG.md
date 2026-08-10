@@ -6,6 +6,98 @@ All notable changes to the ai-agent plugin. Versioning follows semver via
 
 ## 1.1.0 — Unreleased
 
+### Workspace
+- New SessionStart hook `hooks/scripts/scaffold-dirs.sh` — idempotently creates the plugin's
+  two workspace directories in the consuming repo, each with a README explaining what belongs
+  in it: `docs/input-specs/` (drop zone for everything the pipeline reads — SRS, MOMs, design
+  links, module-wise user-story `.xlsx` files) and `docs/output-specs/` (project-level generated
+  artifacts). Guarded so a personally-installed plugin never litters unrelated repos: scaffolds
+  only where `.claude/settings.json` enables the plugin or a `docs/` tree already exists; never
+  blocks, never overwrites, prints one context line only when it creates something.
+- PATH CHANGE: the documents directory `docs/specs/` is renamed `docs/input-specs/`, and
+  `PROJECT_BRIEF.md` moves from the consuming repo root to `docs/output-specs/PROJECT_BRIEF.md`
+  — updated across every agent, command, skill, template, and the event-logger's path filters.
+  Projects onboarded under 1.0.0 should `git mv` the old paths once (`docs/specs/` →
+  `docs/input-specs/`, `PROJECT_BRIEF.md` → `docs/output-specs/PROJECT_BRIEF.md`).
+  Per-ticket outputs stay in `docs/tickets/<KEY>/`; `docs/decisions.md` does not move.
+- The scaffolded `README.md` inside the documents directory is never treated as a project
+  document: doc-analyst excludes it from inventory, and a directory holding nothing but that
+  README still triggers the onboarding preflight stop.
+- CI: new "Scaffold hook smoke tests" step — creation, idempotence, never-overwrite, and the
+  unrelated-repo guard.
+- If the hook could not create the workspace (guard not met, hook disabled), nothing degrades
+  silently: the `/onboard-project` and `/gap-analysis` preflights stop and tell the developer
+  exactly which folders to create manually and what to place in them.
+
+### Gap analysis
+- `scripts/xlsx-extract.py` — converts the module-wise user-story `.xlsx` workbooks developers
+  drop into `docs/input-specs/` to plain TSV agents can Read (the Read tool cannot open
+  spreadsheet binaries). An `.xlsx` is a zip of XML, so this is python3 standard library only
+  (`zipfile` + `xml.etree`): no pip installs, no network, reads exactly the one file it is
+  given, writes nothing. Handles shared strings (including rich-text runs), inline strings,
+  cached formula results, booleans, and date-styled numbers (converted to ISO dates — agents
+  never see raw Excel serials); embedded tabs/newlines are escaped so one spreadsheet row is
+  always one TSV line, and gaps between populated cells keep their column positions. Modes:
+  whole workbook (each sheet headed `# sheet: <name>`), one sheet by name, or `--list`.
+  Fails loudly (exit 1, one-line stderr) on a missing file, a non-xlsx file, or an unknown
+  sheet name.
+- CI: `scripts/*.py` now covered by syntax/executable checks, plus an "xlsx extraction smoke
+  test" step that builds a fixture workbook in-place and asserts sheet listing, cell-type
+  handling, date conversion, escaping, column-gap fidelity, and the error paths.
+- `gap-analyst` agent + `/gap-analysis` command — compares the developer's module-wise user
+  stories (the `.xlsx` workbooks in `docs/input-specs/`) against the brief in both directions:
+  brief requirements no story covers (MISSING-STORY / PARTIAL), stories nothing in the brief
+  grounds (UNSOURCED-STORY), and contradictions quoted from both sides (CONFLICT — direction
+  of fix is always the developer's call). Story modules are mapped to the brief's Module
+  Briefs through the Domain Glossary; unmappable modules are reported UNMAPPED with a
+  disposition request, never forced. Chat gets the verdict (with delta against the previous
+  run), the module status table, and top gaps; the full consolidated module-wise detail is
+  regenerated whole each run at `docs/output-specs/GAP_ANALYSIS.md` (new locked template
+  `templates/gap-report.md`). Report-only end to end. The first pass runs AUTOMATICALLY:
+  `/onboard-project` chains into `/gap-analysis` right after the brief is written whenever
+  workbooks are present; the developer runs `/gap-analysis` directly only to iterate — after
+  each round of corrections — until every module reads ALIGNED.
+- `PROJECT_BRIEF.md` gains locked Section 11 (Module Briefs): one subsection per functional
+  module as the DOCUMENTS define them (SRS chapters, MOM decisions, Figma flows — never the
+  repo layout, and never the story workbooks, which would make the comparison circular) —
+  the canonical module list `/gap-analysis` compares against. doc-analyst treats `.xlsx`
+  files in the documents directory as gap-analysis inputs (listed, never distilled into the
+  brief, with a caveat for genuine spreadsheet sources).
+- shared-standards: artifact-conventions table gains the user-story workbook and gap-report
+  paths; the roster now lists every agent and command (it had also been missing
+  `agent-auditor` / `/agent-audit`).
+
+### Observability
+- `hooks/scripts/log-events.sh` (PostToolUse, matcher `Skill|Task|Agent|Read|Write|Edit`) —
+  appends metadata-only JSONL events to `.claude/ai-agent-metrics/events.jsonl` in the
+  consuming repo: skill invocations, agent spawns, reads of standards/knowledge files
+  (`SKILL.md`, `MEMORY.md`, `CLAUDE.md`, `PROJECT_BRIEF.md`, `decisions.md`, `docs/input-specs/`,
+  `docs/output-specs/`, `docs/tickets/`, `templates/`), and writes to pipeline artifacts. Hard rule: never logs
+  file content, command strings, prompts, or tool responses — names and paths only, so
+  nothing secret-shaped or PHI-shaped can land in the log by construction. Never blocks
+  (always exits 0, failures swallowed), fails silent without `jq`, rotates past ~5MB, and
+  the metrics directory self-ignores via a generated `.gitignore`. This is the ground-truth
+  data source for the planned `/agent-audit` command.
+- Both safety hooks now log their denials to the same event log (rule/pattern names only,
+  never the blocked command or matched values) — previously denials left no trace.
+- CI: new "Observability hook smoke tests" step covering event capture, noise filtering,
+  content-leak prevention, denial logging, and the self-ignoring metrics directory.
+- `agent-auditor` agent + `/agent-audit <KEY>` command — per-ticket pipeline audit that
+  cross-references the event log (process: right agent per stage, right skills loaded,
+  PROJECT_BRIEF grounding, hipaa skill on PHI-relevant work, hook denials) with the ticket's
+  artifacts (structure/completeness against the locked templates, never content quality).
+  Every grade is PASS/WARN/FAIL/NO-DATA with cited evidence; missing event log degrades to
+  artifact-only mode with NO-DATA process rows, never fabricated grades. Writes exactly two
+  files: the regenerated scorecard `docs/tickets/<KEY>/audit.md` and one appended trend row in
+  `docs/agent-metrics.md`. Report-only end to end — a FAIL blocks nothing, fixes nothing, and
+  the developer decides what to act on.
+- `scripts/aggregate-metrics.sh` — lead-facing cross-repo aggregation: merges the
+  `docs/agent-metrics.md` trend files from any number of consuming repos into one team-wide
+  markdown report on stdout (per-repo summary with totals, then every audit row newest-first).
+  Plain bash + awk, reads exactly one file per repo, writes nothing, never runs git; repos
+  without data and malformed rows are reported, never silently dropped. CI: syntax/executable
+  checks now cover `scripts/`, plus a behavioral smoke test for the aggregation.
+
 ### Skills
 - `spring-boot` — new Performance Rules section: measure-first gate (performance-motivated
   complexity must cite a profile, named hot path, or spec requirement), plus six checkable
