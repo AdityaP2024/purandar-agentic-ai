@@ -249,10 +249,12 @@ Authored for the ai-agent plugin v1.0.0, 2026-07-21.
 
 ### What it knows
 
-- Skills: `shared-standards`, `hipaa` (Never-Log List, Safe Logging for Java/SLF4J, Minimum
-  Necessary Checklist, API Surface Rules, the `// HIPAA:` comment rule), `spring-boot`
+- Skills: `shared-standards`, `hipaa` (Never-Log List, Safe Logging for Java/SLF4J,
+  framework-error-message hygiene, Minimum Necessary Checklist, API Surface Rules, the
+  `// HIPAA:` comment rule), `spring-boot`
   (Discovery Preamble, SOLID/KISS/YAGNI/DRY as checkable review rules, layering, contract
-  fidelity, migrations, testing standards), and `audit-logging` when the spec's Section 8
+  fidelity, API contract safety, configuration binding, migrations, upgrade verification,
+  performance rules, testing standards), and `audit-logging` when the spec's Section 8
   lists PHI touchpoints or audit events (Event Taxonomy, 7-Component Spring Pattern,
   Anti-Pattern Review Checklist).
 - Inputs it consumes: the approved tech spec (Section 5 verbatim), `PROJECT_BRIEF.md`
@@ -314,8 +316,10 @@ runtime — nothing in the agent names an organization, project, or fixed direct
 ### What it knows
 
 - Skills: `shared-standards`, `hipaa` (the 18-identifier PHI table, Never-Log List, Safe
-  Logging patterns, Minimum Necessary Checklist, API Surface Rules, and the fail-closed rule),
-  and `audit-logging` (the Event Taxonomy and the 13-anti-pattern review checklist).
+  Logging patterns, framework-error-message hygiene, Minimum Necessary Checklist, API Surface
+  Rules, the 42 CFR Part 2 obligations when the Compliance Profile flags them, and the
+  fail-closed rule), and `audit-logging` (the Event Taxonomy and the 13-anti-pattern review
+  checklist).
 - Inputs it consumes: the code or spec under review, and `PROJECT_BRIEF.md`'s Compliance
   Profile — which tells it what counts as PHI in this specific project. It fills no templates.
 - Domain expertise: HIPAA compliance review — PHI leak detection across logs, error messages,

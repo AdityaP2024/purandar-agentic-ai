@@ -1,6 +1,6 @@
 ---
 name: hipaa
-description: read this as the fast PHI/HIPAA check during any code review, code generation, or spec that touches patient or member data
+description: read this as the fast PHI/HIPAA check during any code review, code generation, or spec that touches patient or member data — leak prevention, minimum necessary, framework-error-message hygiene, and 42 CFR Part 2 obligations where the project's Compliance Profile flags them
 ---
 
 # HIPAA / PHI Reference Card
@@ -69,6 +69,34 @@ throw new EntityNotFoundException("Member not found"); // HIPAA: no identifying 
 
 Also NEVER: PHI in MDC values echoed to log lines, in `@Slf4j` debug dumps of request/response bodies, or in messages of exceptions that propagate to API error responses.
 
+## Framework Error Messages — They Quote the Payload
+
+The messages you write are only half the surface: messages the framework and its drivers GENERATE embed the data that caused them. Three recurring sources, each a VIOLATION the moment the message reaches an API response, a log line, or an error-reporting payload:
+
+- **JSON parse errors** quote the offending request body — on a PHI API, that is the patient record being submitted.
+- **Bean Validation / binding failures** can echo the rejected value in their default messages.
+- **Database constraint violations** name the conflicting value (`Key (email)=(jane@example.com) already exists`).
+
+The rule: at every boundary handler (`@ExceptionHandler` methods, advice classes, filter-level error writers), the framework's message is REPLACED with a generic one. `ex.getMessage()` from a parser, validator, or driver never reaches an API response — and is not logged either, unless that exception type provably cannot embed data values. When in doubt, log the exception class and a correlation ID, not the message.
+
+```java
+// VIOLATION: the parser message quotes the malformed request body — PHI included
+@ExceptionHandler(HttpMessageNotReadableException.class)
+ResponseEntity<ApiError> onUnreadable(HttpMessageNotReadableException ex) {
+    log.warn("Bad request: {}", ex.getMessage());
+    return badRequest(ex.getMessage());
+}
+
+// CORRECT: generic message both ways; the payload reaches neither response nor log
+@ExceptionHandler(HttpMessageNotReadableException.class)
+ResponseEntity<ApiError> onUnreadable(HttpMessageNotReadableException ex) {
+    log.warn("Malformed request body requestId={}", requestId); // HIPAA: parser messages quote the payload — never log or return them
+    return badRequest("Malformed request body");
+}
+```
+
+The same discipline applies to any centralized handler the repo already has: a handler that passes framework messages through is a finding even when every message it currently produces happens to be clean — the next malformed payload writes the message.
+
 ## Safe Logging — React / TypeScript
 
 NEVER put PHI in `console.*`, `localStorage`/`sessionStorage`, URL query params or route params, third-party analytics, or error-reporting payloads.
@@ -104,13 +132,25 @@ Ask all four before writing or approving any query, endpoint, or fetch that touc
 
 If any answer is "no" or "unknown", narrow the selection before proceeding.
 
+## 42 CFR Part 2 — Substance-Use / Behavioral-Health Records
+
+Applicability is a project fact, not a default. Check the Compliance Profile in `PROJECT_BRIEF.md`: when it marks any data as covered by 42 CFR Part 2 (substance use disorder treatment records — common in behavioral-health projects), the rules below apply ON TOP of everything else on this card, because Part 2 is stricter than HIPAA. When the profile is silent but the project is plainly behavioral-health, raise applicability as an open question to the developer and apply these rules in the interim — never assume Part 2 away.
+
+- **Consent gates disclosure.** Part 2 records leave the system boundary (responses to another organization, exports, outbound integrations) only through a code path that verifies a valid consent covering that recipient and purpose. A disclosure path with no consent check is a VIOLATION; a consent model that cannot express recipient or purpose is a RISK to surface at spec time.
+- **Marked and separable.** Part 2 data is distinguishable in the data model — a flag, type, or category the schema actually carries. Consent checks and disclosure accounting are impossible against records that cannot be told apart from general PHI, so a design that mixes them indistinguishably is a spec-time finding.
+- **No silent re-disclosure.** Data received under a Part 2 consent is not forwarded onward (downstream integrations, secondary exports), and exports of Part 2 data carry the redisclosure-prohibition notice wherever the format supports one.
+- **Disclosures are accounted.** Every Part 2 disclosure emits an audit event — the event taxonomy, retention, and integrity rules live in the `audit-logging` skill (EXPORT events); this card requires only that the disclosure path emits one.
+
+Everything else on this card applies unchanged; treat Part 2 fields as the most sensitive entries of the Never-Log List.
+
 ## API Surface Rules
 
 | Rule | Requirement |
 |------|-------------|
 | Query strings | PHI NEVER in query strings or path segments. Search with PHI criteria MUST use POST with the criteria in the body. |
 | Response shaping | Apply field-level filtering (DTO projections) so responses carry only the fields the consuming screen renders — never return the full entity by default. |
-| Error responses | Generic messages plus an error code and correlation ID; identifying detail stays in internal logs (by surrogate ID). |
+| Error responses | Generic messages plus an error code and correlation ID; identifying detail stays in internal logs (by surrogate ID). Framework-generated messages are never passed through — see "Framework Error Messages". |
+| Record scoping | A child record fetched under a parent path or parameter MUST be verified to belong to that parent (scoped in the query itself where possible), and every lookup is scoped to the records the requesting user is authorized for — an unscoped child lookup is cross-patient exposure. |
 | Examples and tests | NO real or realistic PHI in example payloads, fixtures, seed data, or tests — placeholder IDs and obviously-fake values only (e.g. `member-0001`, `TEST_LASTNAME`). |
 | Specs | tech-specs in `docs/tickets/<KEY>/tech-spec.md` MUST mark each PHI-bearing field in request/response tables so implementers inherit the constraint. |
 

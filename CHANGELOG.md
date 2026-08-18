@@ -99,6 +99,67 @@ All notable changes to the ai-agent plugin. Versioning follows semver via
   checks now cover `scripts/`, plus a behavioral smoke test for the aggregation.
 
 ### Skills
+- `shared-standards` — the Decision Log Protocol gains a deferred-controls rule: a deliberately
+  postponed control (authorization, audit logging, consent handling, rate limiting) is recorded
+  as a decision entry with its ending condition in Consequences, and the recorded deferral
+  binds both ways — never silently implement it ("while I'm here" is scope creep against an
+  owner decision) and never assume it exists when code would rely on it. Reviews still report
+  the gap, citing the entry ID and stating whether the trigger condition has arrived; work
+  matching the trigger says so explicitly — the deferral is due for supersession, not silent
+  continuation.
+- `hipaa-compliance` — Phase 2 now grades missing controls against recorded deferrals: covered
+  by a deferral whose trigger has not arrived, RISK citing the entry; trigger met by the scope
+  under review, full severity plus the supersession call-out; no deferral entry, graded on
+  exposure alone. A deferral changes a finding's framing, never the gap's visibility.
+- `spring-boot` — the Discovery Preamble table gains a cross-cutting-control-status row:
+  discover which authorization and audit enforcement points actually exist in the code, plus
+  `docs/decisions.md` for deliberate deferrals — never assume a control exists because the
+  stack supports it, never add a deferred one unbidden.
+- `hipaa` — new "Framework Error Messages — They Quote the Payload" section: messages the
+  framework and its drivers generate embed the data that caused them (JSON parse errors quote
+  the request body, validation failures can echo the rejected value, DB constraint violations
+  name the conflicting value), so boundary handlers replace framework messages with generic
+  ones — `ex.getMessage()` from a parser/validator/driver never reaches a response, and is not
+  logged unless the exception type provably cannot embed data values. A pass-through handler is
+  a finding even while its current messages happen to be clean.
+- `hipaa` — new "42 CFR Part 2 — Substance-Use / Behavioral-Health Records" section, gated on
+  the project's Compliance Profile flagging Part 2 (with an open-question fallback for plainly
+  behavioral-health projects whose profile is silent): consent-verified disclosure paths,
+  Part 2 data marked and separable in the data model, no silent re-disclosure, and every
+  disclosure emitting an audit event (taxonomy stays in the `audit-logging` skill). Applies on
+  top of the card's HIPAA rules; a no-op for projects the profile does not flag.
+- `hipaa` — API Surface Rules gains a record-scoping row (child records verified against the
+  parent in the path, lookups scoped to the requesting user's authorized records — the
+  code-level pair of the spring-boot skill's nested-resource rule), and the error-responses row
+  now points at the framework-message rule.
+- `hipaa-compliance` — the Phase 1 surface-scan table enumerates the new surfaces: framework
+  error pass-through at boundary handlers, unscoped child lookups, and (when the Compliance
+  Profile flags Part 2) disclosure paths, consent checks, and data-model markability.
+- `spring-boot` — new API Contract Safety section, seven checkable edge rules: client-supplied
+  sort/filter fields validated against a per-resource allow-list (unchecked they reach the
+  database as `ORDER BY` targets); guessable sequential IDs never exposed at the API edge
+  (enumeration surface — and a reported WARNING on PHI-bearing resources with no external-id
+  convention); server-owned fields never bound from request bodies (separate update DTOs make
+  the wrong request unrepresentable); update uniqueness checks exclude the row under edit;
+  nested resources verified against the parent in the path (cross-scope reads); writes spanning
+  the database and a non-transactional external system ordered DB-first/external-last or
+  explicitly compensated; authorization/lifecycle gates on nullable flags fail closed.
+- `spring-boot` — new Configuration Binding section: related settings bind through one grouped,
+  validated `@ConfigurationProperties` class whose constraints fail startup naming the bad
+  property (an unconstrained field boots broken instead of not booting); `@Value` only for
+  true one-offs; never re-declare framework-owned properties; never hold config in static state.
+- `spring-boot` — the Discovery Preamble now counts a repo's own convention documents
+  (`CLAUDE.md`, patterns/standards files) as discovery sources with the same authority as the
+  code where the code follows them; doc-vs-code drift is surfaced to the developer, never
+  silently resolved.
+- `spring-boot` — new Dependency and Framework Upgrades section: version bumps no ticket asks
+  for are a stop-and-surface (same gate as a new dependency), and upgrade verification is
+  behavioral, never "it builds and boots" — migrations confirmed against the migration tool's
+  own bookkeeping, previously-bound config still binding, split-out/renamed framework modules
+  checked against the build file, serialization and strictness defaults asserted as API
+  contract via the negative-path test harness, one version of each library on the classpath
+  (a stale transitive major compiles and diverges at runtime), and a full clean rebuild after
+  any type or signature change.
 - `spring-boot` — new Performance Rules section: measure-first gate (performance-motivated
   complexity must cite a profile, named hot path, or spec requirement), plus six checkable
   rules — N+1 queries, collection fetch strategy, batch writes (with the `jdbc.batch_size`

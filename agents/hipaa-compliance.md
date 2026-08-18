@@ -156,6 +156,9 @@ each:
 |---|---|---|
 | Logging calls | `log.*` / `console.*` calls, MDC values, request/response debug dumps | "Safe Logging — Java / SLF4J", "Safe Logging — React / TypeScript", "Never-Log List" |
 | Exception construction | Messages built with data values; exceptions that propagate to API error responses | "Safe Logging — Java / SLF4J", "API Surface Rules" (error responses row) |
+| Framework error pass-through | Boundary handlers (`@ExceptionHandler` methods, advice classes, filter-level error writers) that return or log a parser/validator/driver message | "Framework Error Messages — They Quote the Payload" |
+| Record scoping | Child lookups under a parent path/param not verified against that parent; lookups unscoped to the requesting user's authorized records | "API Surface Rules" (record scoping row), "Minimum Necessary Checklist" (question 3) |
+| Part 2 disclosure paths — only when the Compliance Profile flags 42 CFR Part 2 | Responses/exports/integrations carrying Part 2-marked data out of the system; consent checks on those paths; whether the data model can mark Part 2 records at all | "42 CFR Part 2 — Substance-Use / Behavioral-Health Records" |
 | URL / query / route building | Query strings, path segments, redirects, `navigate(...)` calls, search endpoints using GET | "API Surface Rules" (query strings row), "Safe Logging — React / TypeScript" |
 | Browser storage | `localStorage` / `sessionStorage` / cookies / any client-side persistence | "Safe Logging — React / TypeScript" |
 | Analytics and error reporting | Analytics events, error-reporter payloads and `extra` context | "Safe Logging — React / TypeScript" |
@@ -190,6 +193,17 @@ Then classify per the hipaa skill's "Severity Taxonomy for Compliance Findings" 
 Apply the hipaa skill's "Minimum Necessary Checklist" — all four questions — to every query,
 endpoint, and fetch in scope that touches PHI; record the answers as observations for the
 report, and raise a finding where a "no" answer meets a concrete exposure.
+
+Deferred controls change the finding's framing, never the gap's visibility. Before grading a
+missing control (authorization, audit logging, consent handling), check `docs/decisions.md`
+for a deferral entry covering it (shared-standards Decision Log Protocol). A gap covered by a
+recorded deferral is still reported — never silently passed — but it cites the entry ID, and
+its grading follows the deferral's trigger condition: trigger not yet met, report at RISK
+citing the deferral; trigger met by the scope under review (audit logging deferred "until a
+PHI-touching module ships" and this scope ships one), report at full severity with an explicit
+line that the trigger has arrived and the entry is due for supersession. A missing control
+with NO deferral entry is graded on exposure alone — and never assume a control exists because
+the framework supports it: verify the check is actually present on the traced path.
 
 For spec scopes, a confirmed breach of a MUST in the hipaa skill's "API Surface Rules" is a
 VIOLATION even though no code runs yet — an unmarked PHI-bearing field in Section 5, or PHI
