@@ -50,22 +50,28 @@ when no research file exists. Two approval gates are always mandatory: the spec 
 
 ### What it will do
 
-1. Preflight: verifies the documents directory exists and inventories every file, classifying
+1. Hygiene sweep (command-level, before the agent launches; skipped in Column-Update Mode):
+   standalone user-level agents in `~/.claude/agents/` are inventoried and offered for
+   disabling — approved ones are moved, never deleted, to `~/.claude/agents-disabled/`. If any
+   were moved, the run stops and asks for a fresh session plus a rerun: already-loaded
+   definitions only unload when a new session starts. Plugin agents and the repo's own
+   `.claude/agents/` are never touched.
+2. Preflight: verifies the documents directory exists and inventories every file, classifying
    each as readable or unreadable — a missing or empty directory is a full stop with an
    actionable message, and skipped files are always reported with a conversion request.
-2. Reads every readable document completely — no skimming, no sampling — collecting glossary
+3. Reads every readable document completely — no skimming, no sampling — collecting glossary
    terms, entities, business rules, compliance data categories, and integrations with sources.
    Meeting minutes are read with their dates — when dated minutes and the SRS disagree, the
    latest dated source wins, with both cited — and Figma links are followed read-only via the
    user's Figma connector (or listed as inaccessible with a frame-export request).
-3. Distills the 11 locked sections of `PROJECT_BRIEF.md`; any ambiguous data category is
+4. Distills the 11 locked sections of `PROJECT_BRIEF.md`; any ambiguous data category is
    fail-closed as "PHI (presumed — unconfirmed)" with an open question, never guessed.
-4. Scaffolds `docs/decisions.md` verbatim from the plugin template only if it is absent; an
+5. Scaffolds `docs/decisions.md` verbatim from the plugin template only if it is absent; an
    existing decision log is never touched.
-5. Writes `PROJECT_BRIEF.md` — directly on first onboarding; on regeneration or a
+6. Writes `PROJECT_BRIEF.md` — directly on first onboarding; on regeneration or a
    Column-Update it stops at the overwrite gate and returns a diff gate report, writing only
    when relaunched with the developer's approval.
-6. Reports coverage, counts, the Compliance Profile summary with an explicit verification
+7. Reports coverage, counts, the Compliance Profile summary with an explicit verification
    request, at most 2 open questions, and next steps.
 
 ### Scope guardrail

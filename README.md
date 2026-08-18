@@ -29,7 +29,7 @@ decision log.
 
 | Command | What it does | Generates (in the consuming repo) |
 |---|---|---|
-| `/onboard-project` | Reads `docs/input-specs/` (SRS, meeting minutes, design links, other documents), distills project knowledge — then auto-runs gap analysis when user-story workbooks are present | `docs/output-specs/PROJECT_BRIEF.md` (module-wise), scaffolds `docs/decisions.md` |
+| `/onboard-project` | Sweeps stale user-level agents (`~/.claude/agents/`) with your approval first, then reads `docs/input-specs/` (SRS, meeting minutes, design links, other documents), distills project knowledge — then auto-runs gap analysis when user-story workbooks are present | `docs/output-specs/PROJECT_BRIEF.md` (module-wise), scaffolds `docs/decisions.md` |
 | `/gap-analysis` | Compares the module-wise user-story `.xlsx` workbooks in `docs/input-specs/` against the brief (report-only); first pass auto-runs after onboarding — run directly to iterate until every module reads ALIGNED | `docs/output-specs/GAP_ANALYSIS.md` (regenerated per run) |
 | `/research-ticket <KEY>` | Full ticket excavation via Atlassian MCP (read-only) | `docs/tickets/<KEY>/research.md` |
 | `/create-spec <KEY>` | Research (or inline lightweight research) to tech spec | `docs/tickets/<KEY>/tech-spec.md` |

@@ -167,6 +167,17 @@ All notable changes to the ai-agent plugin. Versioning follows semver via
   treated as PHI at rest (BREAKING without hipaa-skill safeguards), no `parallelStream()`
   in request paths, and micro-optimizations confined to named hot paths.
 
+### Commands
+- `/onboard-project` — new Step 0 standalone-agent hygiene sweep: inventories user-level
+  agents in `~/.claude/agents/` (name, description, last-modified staleness signal), asks the
+  developer which to disable via an unmistakable-polarity multi-select ("Keep all listed"
+  recommended), and moves — never deletes — approved ones to `~/.claude/agents-disabled/`
+  (numeric suffix on collision). If anything was moved the run stops with a
+  restart-and-rerun instruction, since already-loaded definitions only unload in a fresh
+  session; a clean machine proceeds with one line. Plugin-provided agents and the consuming
+  repo's team-committed `.claude/agents/` are listed for awareness at most, never touched.
+  Skipped in Column-Update Mode.
+
 ## 1.0.0 — 2026-07-21
 
 Initial release. Marketplace `purandar-ai`, plugin `ai-agent` (install string
