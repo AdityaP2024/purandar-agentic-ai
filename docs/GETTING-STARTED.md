@@ -90,7 +90,11 @@ Do this once per project:
    PDF, markdown, or plain text. The one exception is `.xlsx`: spreadsheet workbooks here are
    treated as your module-wise user stories — inputs to `/gap-analysis` (see below), never
    sources the brief is distilled from.
-2. **Run `/onboard-project`.** The doc-analyst agent reads every document completely and
+2. **Run `/onboard-project`.** It starts with a hygiene sweep of stale user-level agents in
+   `~/.claude/agents/` — you choose which to disable (files are moved aside, never deleted).
+   If anything was disabled, the command stops and asks you to start a fresh session and rerun,
+   because already-loaded agent definitions only unload in a new session; a clean machine flows
+   straight through. Then the doc-analyst agent reads every document completely and
    distills them into `docs/output-specs/PROJECT_BRIEF.md` — the operational brief every other
    agent reads instead of the originals — and scaffolds `docs/decisions.md` if it does not
    exist. If user-story `.xlsx` workbooks are in the documents directory, **gap analysis runs

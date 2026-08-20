@@ -1,6 +1,6 @@
 ---
 name: spring-boot
-description: read when implementing or reviewing Java/Spring Boot code — layering, SOLID/KISS/YAGNI/DRY as checkable review rules, tech-spec contract fidelity, migrations, performance rules (N+1, batching, caching, parallelism), and testing standards for the backend-springboot agent
+description: read when implementing or reviewing Java/Spring Boot code — layering, SOLID/KISS/YAGNI/DRY as checkable review rules, tech-spec contract fidelity, API contract safety, configuration binding, migrations, upgrade verification, performance rules (N+1, batching, caching, parallelism), and testing standards for the backend-springboot agent
 ---
 
 # Java / Spring Boot Engineering Standards
@@ -20,8 +20,9 @@ Nothing on this card names a version, directory, or org constant. Every stack fa
 | Test frameworks and DB test strategy | test dependencies plus existing tests (Testcontainers-style, embedded DB, slices) |
 | DTO/entity mapping approach | existing mapping code (manual, generated, or library-based) |
 | Correlation ID and logging conventions | logging config, filters, and existing log statements |
+| Cross-cutting control status — authorization checks, audit seam | the security configuration and enforcement points actually present in the code, plus `docs/decisions.md` for controls deliberately deferred — never assume a control exists because the stack supports it, and never add a deferred one unbidden (shared-standards Decision Log Protocol) |
 
-Where the tech-spec speaks (Sections 5, 6, 10), the spec wins over repo habit for the contract itself. Where the spec is silent on a convention, the repo's existing code IS the convention. A gap or ambiguity in Section 5 is a stop-and-surface to the developer, never a guess.
+Where the tech-spec speaks (Sections 5, 6, 10), the spec wins over repo habit for the contract itself. Where the spec is silent on a convention, the repo's existing code IS the convention — and a convention document the repo itself maintains (its `CLAUDE.md`, a patterns/standards file under its docs) counts as a discovery source with the same authority, provided the code actually follows it. Where such a document and the code disagree, surface the drift to the developer; never silently pick a side. A gap or ambiguity in Section 5 is a stop-and-surface to the developer, never a guess.
 
 ## Design Principles as Review Rules
 
@@ -134,12 +135,109 @@ public MemberSummaryResponse get(@PathVariable String id) {
 - **Error mapping:** implement Section 5(d) exactly — status, condition, body shape per row — through the project's EXISTING centralized exception handler and error envelope. Discover the `@RestControllerAdvice` and envelope class first; NEVER invent a second handler or a parallel error shape. If `docs/decisions.md` carries an entry on the error convention, follow it and cite the ID. If the repo has no centralized handler at all, that is a stop-and-surface (and likely a new decision-log entry via the shared-standards protocol), not an ad-hoc `try/catch` in the controller. A Section 5(d) body shape that cannot be produced through the existing handler/envelope is a CONFLICT — stop with a conflict gate quoting the spec row and the envelope class verbatim; never fork a second shape, never silently reshape.
 - **Names and bindings:** endpoint signatures, request/response shapes, operation names, and Section 5(f) field bindings are used exactly as written. Anything missing or ambiguous stops the work and goes to the developer.
 
+## API Contract Safety
+
+Edge rules for every endpoint written or reviewed. Each is a finding on its own — none needs a spec citation. Several overlap the `hipaa` skill's territory; where a violation exposes patient or member data, that skill's severity taxonomy applies on top of the finding here.
+
+### Client-supplied sort and filter fields — allow-listed, never passed through
+
+A sort field from the query string reaches the ORM as a property name and the database as an `ORDER BY` target. Unvalidated, it is an injection surface, and its failure mode leaks internal column names in error responses. Every list endpoint that accepts a sort parameter validates it against an explicit allow-list of sortable properties and rejects anything else with a 400 naming the allowed values — never the underlying persistence error.
+
+```java
+// VIOLATION: client string handed straight to the ORM
+Pageable page = PageRequest.of(pageNum, size, Sort.by(direction, sortBy));
+
+// CORRECT: per-resource allow-list; unknown fields rejected at the boundary
+private static final Set<String> SORTABLE = Set.of("createdAt", "status", "priority");
+if (!SORTABLE.contains(sortBy)) {
+    throw new InvalidSortFieldException(SORTABLE); // 400 naming the allowed values
+}
+```
+
+### Identifier exposure — guessable sequential IDs never cross the API edge
+
+A sequential database PK exposed in a path or response lets a caller probe rows by counting — an enumeration surface, and on PHI-bearing resources an access-control finding under the `hipaa` skill. New endpoints follow the repo's existing external-identifier convention (a UUID or other non-guessable key); the internal PK stays internal, and related entities referenced at the edge are exchanged by their external identifier too, with the resolution to internal IDs living in the service. If the repo has no such convention, do not invent one silently — adding an external-identifier column is a Section 6 data change to surface, and for a PHI-bearing resource the absence itself is a WARNING to report.
+
+### Server-owned fields — never bound from the request body
+
+Fields the system owns — lifecycle and status flags, audit stamps, identity/routing keys, credential material — never bind from an inbound DTO. Where create and update legitimately accept different fields, they get separate DTOs so the wrong request is unrepresentable rather than merely ignored: a field a client must not set simply does not exist on the update DTO. Two findings: an inbound DTO carrying a field no Section 5(b) row lets the client set, and a mapper copying a client-supplied value into a server-owned column.
+
+```java
+// VIOLATION: update binds the create DTO — the client can flip server-owned state
+entity.setActive(request.active());
+
+// CORRECT: a narrower update DTO; server-owned fields are absent by construction
+public record ReferralUpdateRequest(String priority, String notes) { }
+```
+
+### Uniqueness on update — the row's own record is excluded
+
+A uniqueness check on update that does not exclude the row being updated makes every no-op edit collide with itself.
+
+```java
+// VIOLATION: re-saving the same code fails as a duplicate
+if (repository.existsByCode(request.code())) { throw duplicate(); }
+
+// CORRECT: the row under edit is excluded from the check
+if (repository.existsByCodeAndIdNot(request.code(), id)) { throw duplicate(); }
+```
+
+### Nested resources — the child is verified against the parent in the path
+
+Resolving a child by its own identifier without verifying it belongs to the parent named in the path serves data across sibling scopes — on patient-scoped routes, cross-patient exposure. Every nested route resolves the child AND asserts the parentage, in the query itself where possible.
+
+```java
+// VIOLATION: any valid consentId resolves, whatever member the path names
+Consent c = consentRepository.findByExternalId(consentId).orElseThrow();
+
+// CORRECT: the lookup is scoped by the parent from the path
+Consent c = consentRepository.findByExternalIdAndMemberExternalId(consentId, memberId)
+        .orElseThrow(); // HIPAA: parent scoping prevents cross-member reads
+```
+
+### External-system writes — ordered so a failure leaves no partial state
+
+When one operation changes the database AND a non-transactional external system (identity provider, object storage, mail), the ordering is the correctness: validate everything before any side effect, write the database inside the transaction, call the external system last — its failure then still aborts the database change. The reverse order requires a compensating external call that can itself fail. Where the external call must come first (the external system generates the identifier), the compensation is explicit and tested. Any path that can leave a row without its external counterpart, or the reverse, is a finding.
+
+### Gates on nullable flags — fail closed
+
+An authorization, lifecycle, or eligibility gate that reads a nullable flag must require explicit truth (`Boolean.TRUE.equals(flag)` or equivalent) so an unset value denies rather than grants. A gate that unboxes, or whose null branch falls through to allow, is a finding — BREAKING when it guards access to patient or member data.
+
 ## Data Changes — tech-spec Section 6
 
 - Every schema change ships as a migration file using the migration tool discovered from the build. Never direct DDL, never auto-generated schema edits.
 - NEVER edit an already-applied migration. Corrections are new migrations; migrations are additive.
 - Every new index is justified by the query it serves, per the Section 6 index table. An index with no named query is a YAGNI finding.
 - Migration file naming and sequencing follow the repo's existing migrations directory — read it before naming yours.
+
+## Configuration Binding
+
+- Two or more related settings sharing a prefix bind through ONE grouped, validated configuration class (`@ConfigurationProperties` + `@Validated`, constraints on every field) — never a scatter of `@Value` fields. The fail-fast is the point: a missing or blank value aborts startup naming the property, instead of failing at the first call that needs it. An unconstrained field in such a group is a finding — it boots broken instead of not booting.
+- `@Value` is acceptable only for a genuine one-off with no sibling settings.
+- Never re-declare a framework-owned property as your own binding — inject the framework's properties class instead (e.g. `DataSourceProperties` for the datasource settings), so defaults, relaxed binding, and environment overrides keep working.
+- Never hold configuration in static state — it dodges validation, lifecycle ordering, and test overrides.
+
+```java
+// VIOLATION: scattered, unvalidated — a blank URL surfaces at the first HTTP call
+@Value("${partner.base-url}") private String baseUrl;
+@Value("${partner.timeout-seconds}") private Integer timeoutSeconds;
+
+// CORRECT: one validated group; a bad value fails startup naming the property
+@Validated
+@ConfigurationProperties(prefix = "partner")
+public record PartnerProperties(@NotBlank String baseUrl,
+                                @NotNull @Positive Integer timeoutSeconds) { }
+```
+
+## Dependency and Framework Upgrades
+
+Version changes are never a drive-by: a bump no ticket or spec asks for is a stop-and-surface, the same gate as a new dependency. When an upgrade IS the task, its signature failure mode is the silent no-op — machinery that stops working without an error. A green build and a clean boot verify nothing; upgrade verification is behavioral:
+
+- **Verify by behavior, not by boot.** After the upgrade, confirm the things that can silently disengage actually still run: migrations applied (check the migration tool's own bookkeeping table, not the absence of startup errors), scheduled and async machinery firing, previously-bound configuration still binding — a renamed or no-longer-autoconfigured property binds to nothing without complaint. (The Configuration Binding section's constrained groups are the systematic defense: unbound turns into a startup failure.)
+- **Split-out and renamed modules.** Major framework releases routinely move autoconfiguration or starters into separate artifacts the build must now declare explicitly. The omission produces no error — the feature just stops happening. After a major bump, check the release's migration notes against the build file for every framework capability the repo relies on.
+- **Serialization and framework defaults are contract changes.** A major can change wire formats (date rendering, null handling) and parsing/validation strictness. The API envelope is a contract: assert response shapes and Section 5(d) negative paths through the real handler after the upgrade — the Testing Standards' negative-path tests are the harness, and their absence is what lets a format change ship unnoticed.
+- **One library, one version.** Two majors of the same library on the classpath — the old one retained transitively — is a finding: an import from the stale coordinates compiles and then behaves differently at runtime. Inspect the dependency tree after the bump; align or exclude, and purge imports of the old coordinates.
+- **Clean rebuild after type or signature changes.** An incremental compile can pass against stale classes and hide broken call sites. Upgrade verification — and any change to a field's type — runs the full clean build with tests, not an incremental one.
 
 ## Performance Rules
 
@@ -260,3 +358,7 @@ log.info("Referral created id={}", referral.getId()); // HIPAA: log surrogate ID
 | 14 | Pass the project's coverage gate when one is configured — never lower a threshold, add an exclusion, or delete a quality-gate rule; no gate configured means none is imposed; a shortfall in-scope tests cannot lift is reported, not engineered around. |
 | 15 | No PHI in fixtures or logs; no `System.out`; never weaken a test to make it pass. |
 | 16 | Performance complexity cites a measurement or spec requirement; N+1 queries, unbatched loop writes, un-evicted or unprotected PHI caches, and `parallelStream()` in request paths are findings regardless. |
+| 17 | Client-supplied sort/filter fields are allow-listed; guessable sequential IDs never cross the API edge; server-owned fields never bind from request bodies; update uniqueness excludes the row itself; nested resources are verified against their path parent; gates on nullable flags fail closed. |
+| 18 | Writes spanning the database and an external system are ordered (DB inside the transaction, external call last) or explicitly compensated — no partial state survives a failure. |
+| 19 | Related settings bind through one validated configuration group that fails startup on a bad value; never re-declare framework properties or hold config in static state. |
+| 20 | Version bumps are never drive-by; upgrade verification is behavioral — migrations actually ran, config still binds, serialization contracts asserted through the real handler, one version of each library on the classpath, full clean rebuild. |

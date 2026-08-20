@@ -1,6 +1,6 @@
 ---
 name: onboard-project
-description: Onboard a project for the AI pipeline via the doc-analyst agent — read every document in the documents directory (default docs/input-specs/), distill docs/output-specs/PROJECT_BRIEF.md, and scaffold docs/decisions.md if absent. When module-wise user-story .xlsx workbooks are present, gap analysis runs automatically right after the brief is written. Runs once per project; rerun only after a material SRS change or for a Where Implemented column update, both through the diff-and-approval overwrite gate.
+description: Onboard a project for the AI pipeline via the doc-analyst agent — read every document in the documents directory (default docs/input-specs/), distill docs/output-specs/PROJECT_BRIEF.md, and scaffold docs/decisions.md if absent. Begins with a standalone-agent hygiene sweep — user-level agents in ~/.claude/agents/ are inventoried and, with the developer's approval, moved aside so stale definitions stop loading into every session. When module-wise user-story .xlsx workbooks are present, gap analysis runs automatically right after the brief is written. Runs once per project; rerun only after a material SRS change or for a Where Implemented column update, both through the diff-and-approval overwrite gate.
 argument-hint: [docs-dir]
 ---
 
@@ -12,6 +12,48 @@ any part of `PROJECT_BRIEF.md` or `docs/decisions.md` inline — that is the age
 `${CLAUDE_PLUGIN_ROOT}/agents/doc-analyst.md`.
 
 ## Instructions
+
+0. **Standalone-agent hygiene sweep.** Stale user-level agents load their definitions into every
+   session on this machine and quietly consume context. Sweep them before onboarding starts. This
+   step does NOT apply in Column-Update Mode — determine that first (step 3's criteria) and skip
+   straight to step 1 if so. Scope is exact: only standalone agent files in `~/.claude/agents/`
+   are candidates. Agents provided by installed plugins live in the plugin cache and are NEVER
+   touched. Agent files in the consuming repo's `.claude/agents/` are team-committed: LIST them
+   for awareness ("remove via a PR if stale") but NEVER move or modify them.
+
+   a. **Inventory.** List `~/.claude/agents/*.md`. If the directory is missing or holds no `.md`
+      files, print exactly "No standalone user-level agents found — proceeding." and continue to
+      step 1. Otherwise, for each file read the frontmatter `name` and `description` (when
+      unreadable, show the filename with "no description readable") and its last-modified date —
+      an agent untouched for months is a staleness signal the developer should see.
+
+   b. **Ask — never decide.** Present the inventory with AskUserQuestion: multi-select, one
+      option per agent where SELECTING AN AGENT MEANS DISABLING IT, and "Keep all listed
+      (Recommended)" as the first option. Phrase the question so the polarity is unmistakable:
+      "Select agents to DISABLE (move out of ~/.claude/agents/)". Batch at most 4 agents per
+      question and at most 4 questions per call; more than that means additional calls. If "Keep
+      all listed" is selected alongside individual agents, keep-all wins. Never say "delete": the
+      action is a reversible move.
+
+   c. **Apply — move, never delete.** For each agent the developer selected: create
+      `~/.claude/agents-disabled/` if absent, then move the file there. On a name collision in
+      the destination, append a numeric suffix (`-1`, `-2`, ...) rather than overwriting. NEVER
+      delete an agent file, and never touch a file the developer did not select.
+
+   d. **Stop or proceed.** If nothing was moved (keep-all or empty selection), print one line —
+      "Agent sweep complete — nothing disabled." — and continue to step 1. If one or more agents
+      were moved, their definitions are already loaded into THIS session, so the savings only
+      arrive in a fresh one. Print exactly this (substituting the count and names) and STOP — do
+      not run any later step:
+
+      > Moved {n} agent(s) to ~/.claude/agents-disabled/: {names}. To undo, move a file back into
+      > ~/.claude/agents/. These definitions are still loaded in the current session — start a
+      > NEW session and run /onboard-project again; the sweep will find nothing left to remove
+      > and onboarding will proceed cleanly.
+
+   On a re-run, agents the developer chose to keep are still present and will be listed again —
+   "Keep all listed (Recommended)" makes that a single click. Do not invent state files or
+   markers to remember prior answers.
 
 1. **Parse the argument.** `$ARGUMENTS` is optional. Trim whitespace. If it is empty, the documents
    directory is `docs/input-specs/` (the shared-standards canonical path). Otherwise `$ARGUMENTS` is the

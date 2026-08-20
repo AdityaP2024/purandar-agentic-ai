@@ -50,22 +50,28 @@ when no research file exists. Two approval gates are always mandatory: the spec 
 
 ### What it will do
 
-1. Preflight: verifies the documents directory exists and inventories every file, classifying
+1. Hygiene sweep (command-level, before the agent launches; skipped in Column-Update Mode):
+   standalone user-level agents in `~/.claude/agents/` are inventoried and offered for
+   disabling — approved ones are moved, never deleted, to `~/.claude/agents-disabled/`. If any
+   were moved, the run stops and asks for a fresh session plus a rerun: already-loaded
+   definitions only unload when a new session starts. Plugin agents and the repo's own
+   `.claude/agents/` are never touched.
+2. Preflight: verifies the documents directory exists and inventories every file, classifying
    each as readable or unreadable — a missing or empty directory is a full stop with an
    actionable message, and skipped files are always reported with a conversion request.
-2. Reads every readable document completely — no skimming, no sampling — collecting glossary
+3. Reads every readable document completely — no skimming, no sampling — collecting glossary
    terms, entities, business rules, compliance data categories, and integrations with sources.
    Meeting minutes are read with their dates — when dated minutes and the SRS disagree, the
    latest dated source wins, with both cited — and Figma links are followed read-only via the
    user's Figma connector (or listed as inaccessible with a frame-export request).
-3. Distills the 11 locked sections of `PROJECT_BRIEF.md`; any ambiguous data category is
+4. Distills the 11 locked sections of `PROJECT_BRIEF.md`; any ambiguous data category is
    fail-closed as "PHI (presumed — unconfirmed)" with an open question, never guessed.
-4. Scaffolds `docs/decisions.md` verbatim from the plugin template only if it is absent; an
+5. Scaffolds `docs/decisions.md` verbatim from the plugin template only if it is absent; an
    existing decision log is never touched.
-5. Writes `PROJECT_BRIEF.md` — directly on first onboarding; on regeneration or a
+6. Writes `PROJECT_BRIEF.md` — directly on first onboarding; on regeneration or a
    Column-Update it stops at the overwrite gate and returns a diff gate report, writing only
    when relaunched with the developer's approval.
-6. Reports coverage, counts, the Compliance Profile summary with an explicit verification
+7. Reports coverage, counts, the Compliance Profile summary with an explicit verification
    request, at most 2 open questions, and next steps.
 
 ### Scope guardrail
@@ -249,10 +255,12 @@ Authored for the ai-agent plugin v1.0.0, 2026-07-21.
 
 ### What it knows
 
-- Skills: `shared-standards`, `hipaa` (Never-Log List, Safe Logging for Java/SLF4J, Minimum
-  Necessary Checklist, API Surface Rules, the `// HIPAA:` comment rule), `spring-boot`
+- Skills: `shared-standards`, `hipaa` (Never-Log List, Safe Logging for Java/SLF4J,
+  framework-error-message hygiene, Minimum Necessary Checklist, API Surface Rules, the
+  `// HIPAA:` comment rule), `spring-boot`
   (Discovery Preamble, SOLID/KISS/YAGNI/DRY as checkable review rules, layering, contract
-  fidelity, migrations, testing standards), and `audit-logging` when the spec's Section 8
+  fidelity, API contract safety, configuration binding, migrations, upgrade verification,
+  performance rules, testing standards), and `audit-logging` when the spec's Section 8
   lists PHI touchpoints or audit events (Event Taxonomy, 7-Component Spring Pattern,
   Anti-Pattern Review Checklist).
 - Inputs it consumes: the approved tech spec (Section 5 verbatim), `PROJECT_BRIEF.md`
@@ -314,8 +322,10 @@ runtime — nothing in the agent names an organization, project, or fixed direct
 ### What it knows
 
 - Skills: `shared-standards`, `hipaa` (the 18-identifier PHI table, Never-Log List, Safe
-  Logging patterns, Minimum Necessary Checklist, API Surface Rules, and the fail-closed rule),
-  and `audit-logging` (the Event Taxonomy and the 13-anti-pattern review checklist).
+  Logging patterns, framework-error-message hygiene, Minimum Necessary Checklist, API Surface
+  Rules, the 42 CFR Part 2 obligations when the Compliance Profile flags them, and the
+  fail-closed rule), and `audit-logging` (the Event Taxonomy and the 13-anti-pattern review
+  checklist).
 - Inputs it consumes: the code or spec under review, and `PROJECT_BRIEF.md`'s Compliance
   Profile — which tells it what counts as PHI in this specific project. It fills no templates.
 - Domain expertise: HIPAA compliance review — PHI leak detection across logs, error messages,
