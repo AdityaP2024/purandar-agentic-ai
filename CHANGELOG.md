@@ -4,7 +4,7 @@ All notable changes to the ai-agent plugin. Versioning follows semver via
 `.claude-plugin/plugin.json`; consuming projects pick up releases with
 `/plugin marketplace update`.
 
-## 1.1.0 — Unreleased
+## 1.1.0 — 2026-08-24
 
 ### Workspace
 - New SessionStart hook `hooks/scripts/scaffold-dirs.sh` — idempotently creates the plugin's
