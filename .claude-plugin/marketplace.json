@@ -6,8 +6,18 @@
   "plugins": [
     {
       "name": "ai-agent",
-      "source": "./",
-      "description": "SRS onboarding, Jira research, spec creation, and React/Spring Boot implementation agents with HIPAA compliance built in."
+      "source": "./plugins/ai-agent",
+      "description": "Core pipeline: SRS onboarding, gap analysis, Jira research, spec creation, HIPAA review, and pipeline auditing — with shared standards, templates, and safety hooks. Required by the stack plugins."
+    },
+    {
+      "name": "ai-agent-backend",
+      "source": "./plugins/ai-agent-backend",
+      "description": "Java/Spring Boot implementer agent and engineering standards. Requires ai-agent (core)."
+    },
+    {
+      "name": "ai-agent-frontend",
+      "source": "./plugins/ai-agent-frontend",
+      "description": "React/TypeScript implementer agent and engineering standards. Requires ai-agent (core)."
     }
   ]
 }

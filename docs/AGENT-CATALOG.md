@@ -4,9 +4,9 @@ One page per agent in the ai-agent plugin: what each agent knows, how to launch 
 does when it runs, and where its authority stops. The pipeline the agents form:
 
 ```
-/onboard-project  ->  [/research-ticket]  ->  /create-spec  ->  /implement            ->  /hipaa-check
-   doc-analyst          jira-researcher        spec-writer      backend-springboot        hipaa-compliance
-                        (optional)                               + frontend-react
+/onboard-project  ->  /gap-analysis   ->  [/research-ticket]  ->  /create-spec  ->  /implement            ->  /hipaa-check
+   doc-analyst         gap-analyst          jira-researcher        spec-writer      backend-springboot        hipaa-compliance
+   (repeatable)        (stories arrive)     (optional)                               + frontend-react
 ```
 
 `/research-ticket` is optional — `/create-spec` performs its own inline lightweight research
@@ -14,16 +14,23 @@ when no research file exists. Two approval gates are always mandatory: the spec 
 (the developer approves the tech-spec before `/implement` runs) and the plan gate (inside
 `/implement`, before any code is written).
 
-| Agent | Launched by | Role in one line |
-|---|---|---|
-| `doc-analyst` | `/onboard-project` | Distills the SRS in `docs/input-specs/` into `PROJECT_BRIEF.md` and scaffolds `docs/decisions.md` |
-| `gap-analyst` | `/onboard-project` (automatic when workbooks are present) and `/gap-analysis` (iterations) | Compares the module-wise user-story workbooks against the brief into the regenerated `GAP_ANALYSIS.md` gap report |
-| `jira-researcher` | `/research-ticket` | Excavates a Jira ticket read-only into `docs/tickets/<KEY>/research.md` |
-| `spec-writer` | `/create-spec` | Turns ticket plus research into the locked-template tech spec, ending at the spec approval gate |
-| `frontend-react` | `/implement` | Implements the frontend (React/TypeScript) half of an approved spec |
-| `backend-springboot` | `/implement` | Implements the backend (Java/Spring Boot) half of an approved spec, backend first |
-| `hipaa-compliance` | `/hipaa-check` | Read-only PHI and audit-coverage review; its entire output is its report |
-| `agent-auditor` | `/agent-audit` | Grades pipeline process (event log) + artifact conformance (templates) into a per-ticket scorecard and a trend row |
+The suite ships as three plugins from one marketplace: `ai-agent` (core) carries every agent
+below except the two implementers, which ship in `ai-agent-backend` and `ai-agent-frontend` so
+a repo loads only its own stack. Agent names are globally unique and launched by bare name.
+Every `docs/` path in this catalog resolves under the **context root** (shared-standards
+Context Root rule): the repo's own `docs/` by default, or the sibling context repo named by
+`.claude/ai-agent.json` in the multi-repo topology.
+
+| Agent | Plugin | Launched by | Role in one line |
+|---|---|---|---|
+| `doc-analyst` | ai-agent | `/onboard-project` | Distills the SRS in `docs/input-specs/` into `PROJECT_BRIEF.md` and scaffolds `docs/decisions.md` |
+| `gap-analyst` | ai-agent | `/gap-analysis` | Compares the module-wise user-story workbooks against the brief into the regenerated `GAP_ANALYSIS.md` gap report |
+| `jira-researcher` | ai-agent | `/research-ticket` | Excavates a Jira ticket read-only into `docs/tickets/<KEY>/research.md` |
+| `spec-writer` | ai-agent | `/create-spec` | Turns ticket plus research into the locked-template tech spec, ending at the spec approval gate |
+| `frontend-react` | ai-agent-frontend | `/implement` | Implements the frontend (React/TypeScript) half of an approved spec |
+| `backend-springboot` | ai-agent-backend | `/implement` | Implements the backend (Java/Spring Boot) half of an approved spec, backend first |
+| `hipaa-compliance` | ai-agent | `/hipaa-check` | Read-only PHI and audit-coverage review; its entire output is its report |
+| `agent-auditor` | ai-agent | `/agent-audit` | Grades pipeline process (event log) + artifact conformance (templates) into a per-ticket scorecard and a trend row |
 
 ---
 
@@ -33,8 +40,8 @@ when no research file exists. Two approval gates are always mandatory: the spec 
 
 - Skills: `shared-standards` (the binding contract for every agent) and `hipaa` (the
   18-identifier table that grounds the Compliance Profile).
-- Templates: `templates/project-brief.md` (the locked 11-section output contract) and
-  `templates/decisions.md` (the decision-log scaffold it copies verbatim).
+- Templates: the core plugin's `templates/project-brief.md` (the locked 11-section output
+  contract) and `templates/decisions.md` (the decision-log scaffold it copies verbatim).
 - Domain expertise: requirements analysis — distilling hundred-page SRS documents into the
   operational brief every downstream agent reads instead of the originals, with every claim
   attributed to its source document and section.
@@ -65,21 +72,29 @@ when no research file exists. Two approval gates are always mandatory: the spec 
    latest dated source wins, with both cited — and Figma links are followed read-only via the
    user's Figma connector (or listed as inaccessible with a frame-export request).
 4. Distills the 11 locked sections of `PROJECT_BRIEF.md`; any ambiguous data category is
-   fail-closed as "PHI (presumed — unconfirmed)" with an open question, never guessed.
+   fail-closed as "PHI (presumed — unconfirmed)" with an open question, never guessed. Every
+   Section 11 module is written `Status: DRAFT` (only `/gap-analysis` certifies FINAL), and
+   recorded resolutions in `docs/decisions.md` are honored in how conflicting or gapped
+   requirements are stated — cited by ID, never treated as a requirement source.
 5. Scaffolds `docs/decisions.md` verbatim from the plugin template only if it is absent; an
    existing decision log is never touched.
-6. Writes `PROJECT_BRIEF.md` — directly on first onboarding; on regeneration or a
-   Column-Update it stops at the overwrite gate and returns a diff gate report, writing only
-   when relaunched with the developer's approval.
+6. Writes `PROJECT_BRIEF.md` and, in the same action, its change manifest
+   `docs/output-specs/.brief-state.json` — directly on first onboarding; on a targeted update
+   (only changed/new documents re-read, only affected sections and modules recomposed,
+   untouched modules byte-identical), a full regeneration, or a Column-Update it stops at the
+   overwrite gate and returns a diff gate report, writing only when relaunched with the
+   developer's approval.
 7. Reports coverage, counts, the Compliance Profile summary with an explicit verification
    request, at most 2 open questions, and next steps.
 
 ### Scope guardrail
 
-Writes exactly two files — `docs/output-specs/PROJECT_BRIEF.md`, and `docs/decisions.md` only when absent — and
-nothing else. It never edits, moves, or deletes anything in the documents directory, never
-invents a domain fact the sources do not contain, and never overwrites an existing brief
-without the diff-and-approval overwrite gate. It never runs git; the developer commits.
+Writes exactly three files — `docs/output-specs/PROJECT_BRIEF.md`, its manifest
+`docs/output-specs/.brief-state.json` (always together with a brief write), and
+`docs/decisions.md` only when absent — and nothing else. It never edits, moves, or deletes
+anything in the documents directory, never invents a domain fact the sources do not contain,
+and never overwrites an existing brief without the diff-and-approval overwrite gate. It never
+runs git; the developer commits.
 
 ### Provenance
 
@@ -93,7 +108,7 @@ Authored for the ai-agent plugin v1.0.0, 2026-07-21.
 
 - Skills: `shared-standards`, `hipaa` (Compliance Notes and the no-PHI-values rule), and
   `audit-logging` when present (audit-event assessment in Compliance Notes).
-- Templates: `templates/research.md` (the locked output contract).
+- Templates: the core plugin's `templates/research.md` (the locked output contract).
 - Domain expertise: requirements excavation — where the real requirement hides in comment #7
   while the description says what the first draft said, where a mockup contradicts the prose,
   where a Sub-task is unintelligible without its parent.
@@ -146,7 +161,7 @@ Authored for the ai-agent plugin v1.0.0, 2026-07-21.
 
 - Skills: `shared-standards`, `hipaa` (PHI marking in the API contract, Section 8 compliance
   content), and `audit-logging` when present (typing Section 8 audit events).
-- Templates: `templates/tech-spec.md` (the locked 13-section output contract).
+- Templates: the core plugin's `templates/tech-spec.md` (the locked 13-section output contract).
 - Domain expertise: contract design — API contracts, data-model changes, and integration
   designs precise enough that implementers consume Section 5 verbatim with no inference.
 
@@ -376,7 +391,7 @@ assumes a specific project.
 ### What it knows
 
 - Skills: `shared-standards` (the binding contract for every agent).
-- Templates: `templates/research.md`, `templates/tech-spec.md`, and `templates/decisions.md` —
+- Templates: the core plugin's `templates/research.md`, `templates/tech-spec.md`, and `templates/decisions.md` —
   the locked structures artifact conformance is graded against, with required-section lists
   derived from the template files at run time, never from memory.
 - Data source: the observability event log `.claude/ai-agent-metrics/events.jsonl` (plus its
@@ -430,10 +445,10 @@ initiative (Phase 1: the metadata-only event-logging hook).
 ### What it knows
 
 - Skills: `shared-standards` (the binding contract for every agent).
-- Templates: `templates/gap-report.md` — the locked 6-section report it regenerates, with the
+- Templates: the core plugin's `templates/gap-report.md` — the locked 6-section report it regenerates, with the
   four gap types (MISSING-STORY, UNSOURCED-STORY, CONFLICT, PARTIAL) and the module statuses
   (ALIGNED, GAPS, NO-STORIES, STORIES-ONLY).
-- Tooling: `scripts/xlsx-extract.py` (python3 stdlib) — the only way it reads the `.xlsx`
+- Tooling: the core plugin's `scripts/xlsx-extract.py` (python3 stdlib) — the only way it reads the `.xlsx`
   user-story workbooks; workbook contents are never guessed.
 - Domain expertise: backlog-vs-specification reconciliation — mapping the developer's
   module-wise user stories onto the brief's Module Briefs (Section 11) through the Domain
@@ -441,11 +456,11 @@ initiative (Phase 1: the metadata-only event-logging hook).
 
 ### How to invoke it
 
-- Automatic first pass: `/onboard-project` executes `/gap-analysis` end to end right after the
-  brief is written, whenever `.xlsx` workbooks are present in the documents directory — the
-  developer never runs the first comparison by hand.
-- Command: `/gap-analysis` (no arguments — one run always compares all modules). This is the
-  iteration path: rerun it after each round of corrections until every module reads ALIGNED.
+- Command: `/gap-analysis` (no arguments — one run always compares all modules). Run it after
+  `/onboard-project` writes or updates the brief and the story workbooks are in place, and
+  again after each round of corrections until every module reads ALIGNED. The agent only
+  compares and reports; the resolution pass, the `GAP-` decision appends, and the Section 11
+  FINAL flips are the command's own main-session writes, each confirmed with the developer.
 - Natural-language dispatch, from the agent's own examples: "We dropped the module-wise user
   stories spreadsheet into docs/input-specs/ — check them against the SRS and the minutes";
   "We fixed the auth stories after the last gap report — where do we stand now?"
@@ -467,16 +482,19 @@ initiative (Phase 1: the metadata-only event-logging hook).
 5. Regenerates `docs/output-specs/GAP_ANALYSIS.md` whole — one consolidated module-wise
    report — and reports in chat: verdict with delta against the previous run, the module
    status table verbatim, top gaps with citations, unmapped modules, and the iteration next
-   step (supply what the gaps name, rerun until every module reads ALIGNED).
+   step (the command's resolution pass follows; fix what the approved resolutions direct and
+   rerun until every module reads ALIGNED and is certified FINAL).
 
 ### Scope guardrail
 
 Report-only in the strongest sense: a gap blocks nothing, and the agent fixes nothing — it
 never edits a story, the brief, a source document, or code, and never runs git. It writes
 exactly one file (the gap report, regenerated by contract on every explicitly-triggered run).
-The brief is its comparison baseline, never its target: a brief that looks wrong or stale
-becomes an open question pointing at /onboard-project, not an improvised finding. No realistic
-personal-data values from stories or documents ever appear in its output — categories only.
+The `GAP-` decision appends and Section 11 FINAL flips belong to the `/gap-analysis` command
+in the main session — never to this agent. The brief is its comparison baseline, never its
+target: a brief that looks wrong or stale becomes an open question pointing at
+/onboard-project, not an improvised finding. No realistic personal-data values from stories or
+documents ever appear in its output — categories only.
 
 ### Provenance
 

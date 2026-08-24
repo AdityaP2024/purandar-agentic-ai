@@ -1,8 +1,0 @@
-{
-  "name": "ai-agent",
-  "description": "Thinkitive AI agent suite: SRS onboarding, Jira ticket research, tech spec creation, and React/Spring Boot implementation agents with HIPAA compliance built in.",
-  "version": "1.1.0",
-  "author": {
-    "name": "CoThink AI"
-  }
-}
