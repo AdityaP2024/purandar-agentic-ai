@@ -1,10 +1,93 @@
 # Changelog
 
-All notable changes to the ai-agent plugin. Versioning follows semver via
-`.claude-plugin/plugin.json`; consuming projects pick up releases with
-`/plugin marketplace update`.
+All notable changes to the purandar-ai plugin suite. Versioning follows semver via
+each plugin's `.claude-plugin/plugin.json` — the three plugins version in lockstep;
+consuming projects pick up releases with `/plugin marketplace update`.
 
-## 1.1.0 — Unreleased
+## 2.0.0 — Unreleased
+
+### BREAKING — one plugin becomes three
+- The single `ai-agent` plugin splits into a three-plugin marketplace hosted in this same repo:
+  `ai-agent` (core — 6 agents, all 8 commands, shared-standards + hipaa + audit-logging skills,
+  templates, hooks, scripts), `ai-agent-backend` (backend-springboot agent + spring-boot
+  skill), `ai-agent-frontend` (frontend-react agent + react skill). A repo enables only what it
+  needs; an FE session never carries Spring Boot definitions again. Marketplace sources are now
+  `./plugins/<name>`; each plugin carries its own `plugin.json`. The three plugins version in
+  lockstep.
+- Cross-plugin wiring: stack agents load core skills by namespaced Skill name
+  (`ai-agent:shared-standards`, `ai-agent:hipaa`, `ai-agent:audit-logging`) — never by
+  `${CLAUDE_PLUGIN_ROOT}` file path (CI step 13 lints this); agents launch by their
+  globally-unique bare names; `/implement` gains a stack-agent availability preflight (step 2f)
+  that stops with enable instructions when the spec needs a stack whose plugin is not enabled.
+- Shared project context for multi-repo projects: code repos may carry `.claude/ai-agent.json`
+  with `{"contextRoot": "../project-context/docs"}` — every `docs/` path in the suite then
+  resolves under the sibling context repo (shared-standards "Context Root" rule; resolution
+  happens once, in each command's preflight, and is passed to agents in the launch prompt). An
+  unresolvable pointer is a hard preflight stop, never a silent fallback. The scaffold hook
+  skips pointer repos; the events log stays session-repo-local; ticket artifacts and
+  `docs/agent-metrics.md` live in the shared context.
+- New `/setup-repo` bootstrap command: asks the repo's role (Backend / Frontend / Project
+  Context) and where the context lives, then merge-writes `.claude/settings.json`
+  (marketplace + enabledPlugins + `permissions.additionalDirectories`) and the pointer file —
+  diff shown and confirmed, unknown keys never touched, re-run safe, developer commits.
+
+### Migration from 1.x
+1. `/plugin marketplace update purandar-ai` (or remove and re-add the marketplace) so the new
+   three-plugin list is seen.
+2. In each repo, run `/setup-repo`, answer the repo-type question, review the settings diff,
+   commit. This is the ONE required step — it adds the stack plugin your repo needs to
+   `enabledPlugins`. (Manual alternative: add `"ai-agent-backend@purandar-ai": true` or
+   `"ai-agent-frontend@purandar-ai": true` yourself.)
+3. Single-repo projects: nothing else. With no pointer file, the context root IS the local
+   `docs/` tree — every command, hook, and path behaves exactly as in 1.x.
+4. Multi-repo projects (optional topology): create the shared project-context repo as a sibling
+   (its docs under `docs/`), move the existing `docs/` contents there, and choose "Sibling
+   context repo" in `/setup-repo` in each code repo.
+5. Regenerate the brief once via `/onboard-project` (full regeneration) to gain Section 11
+   statuses and seed the change manifest; pre-2.0 briefs still compare in `/gap-analysis` but
+   skip FINAL certification until regenerated.
+6. Start a fresh session in each repo.
+
+### Brief lifecycle
+- `/onboard-project` is now a pure, repeatable "input documents → brief" command. The automatic
+  chain into `/gap-analysis` (introduced in 1.1.0) is REMOVED — run `/gap-analysis` yourself once
+  the user-story workbooks are in place. The `.xlsx` workbooks are no longer mentioned as
+  onboarding inputs anywhere; doc-analyst still classifies them as gap-analysis inputs, never
+  brief sources.
+- Manifest-driven incremental updates: every brief write also writes
+  `docs/output-specs/.brief-state.json` (schemaVersion 1 — per input document: relative filename,
+  sha256, last-seen date, and the brief modules it feeds; plus `briefSha256` for hand-edit
+  detection). Reruns hash the input documents (main-session, in the command), classify each as
+  unchanged/changed/new/deleted/renamed, and offer a TARGETED UPDATE — doc-analyst re-reads only
+  the changed and new documents, recomposes only the affected sections and modules, and the gate
+  diff confirms every untouched module is byte-identical — or a full regeneration. Every manifest
+  failure path (missing, corrupt, wrong schema, hashing unavailable) degrades to regeneration,
+  never an error. A renamed file (same hash) updates citations without flipping statuses.
+- Per-module status: brief Section 11 modules carry `Status: DRAFT` or
+  `Status: FINAL — aligned {date} (gap run {date})`, with a rollup bullet in Section 10.
+  doc-analyst writes DRAFT on every compose or recompose and never FINAL; an input-document
+  change flips affected modules back to DRAFT.
+- The brief is now a function of the input documents AND `docs/decisions.md`: recorded
+  resolutions constrain how conflicting or gapped requirements are stated (cited by ID), and are
+  never a requirement source — so regeneration never erases gap resolutions.
+- `/gap-analysis` owns the whole story phase: after the gap-analyst's report (the agent stays
+  strictly report-only), the command walks each gap's resolution with the developer
+  (stories-wrong / brief-sources-wrong / needs-client-clarification / skip), appends approved
+  resolutions to `docs/decisions.md` as `GAP-` entries (client questions as `OPEN` entries,
+  superseded when answered), and certifies modules ALIGNED this run as FINAL via a narrow
+  main-session Status-line edit — the exact counterpart of `/implement`'s reserved main-session
+  writes — then refreshes the manifest's `briefSha256`. A pre-2.0 brief without status fields
+  still compares normally; certification is skipped with a note until the brief is regenerated.
+- `plugins/ai-agent/templates/decisions.md`: new `GAP-` ID namespace row and `OPEN` status
+  (deliberate contract changes, consumed by the same release);
+  `plugins/ai-agent/templates/project-brief.md`: Section 11 Status bullet and Section 10 rollup
+  (same); duplicate Section 11 fill-note in doc-analyst merged.
+- Migration: regenerate the brief once via `/onboard-project` (full regeneration) to gain the
+  Section 11 statuses and seed the manifest; then `/gap-analysis` can certify FINAL. Existing
+  `docs/decisions.md` files gain the `GAP-` namespace row automatically on the first GAP- append
+  (announced in the same drafted diff).
+
+## 1.1.0 — 2026-08-24
 
 ### Workspace
 - New SessionStart hook `hooks/scripts/scaffold-dirs.sh` — idempotently creates the plugin's

@@ -12,15 +12,33 @@ jobs:
 
       - name: Plugin manifests are valid JSON
         run: |
-          jq empty .claude-plugin/plugin.json
-          jq empty .claude-plugin/marketplace.json
-          jq -e '.name and .version and .description' .claude-plugin/plugin.json > /dev/null
-          jq -e '.name and (.plugins | length > 0)' .claude-plugin/marketplace.json > /dev/null
+          status=0
+          count=0
+          for m in plugins/*/.claude-plugin/plugin.json; do
+            [ -e "$m" ] || continue
+            count=$((count + 1))
+            jq empty "$m" || { echo "FAIL: $m is not valid JSON"; status=1; continue; }
+            jq -e '.name and .version and .description' "$m" > /dev/null || { echo "FAIL: $m is missing name/version/description"; status=1; }
+          done
+          [ "$count" -eq 3 ] || { echo "FAIL: expected 3 plugin manifests, found $count"; status=1; }
+          jq empty .claude-plugin/marketplace.json || exit 1
+          jq -e '.name and (.plugins | length == 3)' .claude-plugin/marketplace.json > /dev/null || { echo "FAIL: marketplace must list exactly 3 plugins"; status=1; }
+          # Every marketplace entry's source dir must exist, carry a plugin.json,
+          # and that manifest's name must equal the entry's name.
+          while IFS=$'\t' read -r name source; do
+            dir="${source#./}"
+            [ -d "$dir" ] || { echo "FAIL: marketplace source $source does not exist"; status=1; continue; }
+            mf="$dir/.claude-plugin/plugin.json"
+            [ -f "$mf" ] || { echo "FAIL: $source has no .claude-plugin/plugin.json"; status=1; continue; }
+            actual=$(jq -r '.name' "$mf")
+            [ "$actual" = "$name" ] || { echo "FAIL: $mf name '$actual' != marketplace entry '$name'"; status=1; }
+          done < <(jq -r '.plugins[] | [.name, .source] | @tsv' .claude-plugin/marketplace.json)
+          exit $status
 
       - name: Agents and commands have YAML frontmatter
         run: |
           status=0
-          for f in agents/*.md commands/*.md; do
+          for f in plugins/*/agents/*.md plugins/*/commands/*.md; do
             [ -e "$f" ] || continue
             if [ "$(head -n 1 "$f")" != "---" ]; then
               echo "FAIL: $f is missing YAML frontmatter (must start with ---)"
@@ -40,7 +58,7 @@ jobs:
       - name: Skills have SKILL.md with frontmatter
         run: |
           status=0
-          for d in skills/*/; do
+          for d in plugins/*/skills/*/; do
             [ -d "$d" ] || continue
             # Skeleton phase: empty skill dirs (only .gitkeep) are allowed
             if [ -z "$(find "$d" -type f ! -name '.gitkeep' | head -n 1)" ]; then
@@ -60,17 +78,18 @@ jobs:
 
       - name: Hooks are valid and executable
         run: |
-          if [ -f hooks/hooks.json ]; then
-            jq empty hooks/hooks.json
-            jq -e '.hooks | length > 0' hooks/hooks.json > /dev/null
-          fi
           status=0
-          for s in hooks/scripts/*.sh scripts/*.sh; do
+          for h in plugins/*/hooks/hooks.json; do
+            [ -e "$h" ] || continue
+            jq empty "$h" || { echo "FAIL: $h is not valid JSON"; status=1; continue; }
+            jq -e '.hooks | length > 0' "$h" > /dev/null || { echo "FAIL: $h has no hooks"; status=1; }
+          done
+          for s in plugins/*/hooks/scripts/*.sh plugins/*/scripts/*.sh; do
             [ -e "$s" ] || continue
             bash -n "$s" || { echo "FAIL: $s has syntax errors"; status=1; }
             [ -x "$s" ] || { echo "FAIL: $s is not executable"; status=1; }
           done
-          for p in scripts/*.py; do
+          for p in plugins/*/scripts/*.py; do
             [ -e "$p" ] || continue
             python3 -m py_compile "$p" || { echo "FAIL: $p has syntax errors"; status=1; }
             [ -x "$p" ] || { echo "FAIL: $p is not executable"; status=1; }
@@ -80,8 +99,8 @@ jobs:
       - name: Hook behavior smoke tests
         run: |
           status=0
-          run_git() { printf '{"tool_name":"Bash","tool_input":{"command":%s}}' "$(printf '%s' "$1" | jq -Rs .)" | hooks/scripts/block-git-writes.sh 2>/dev/null; echo $?; }
-          run_write() { printf '{"tool_name":"Write","tool_input":{"file_path":"x","content":%s}}' "$(printf '%s' "$1" | jq -Rs .)" | hooks/scripts/guard-writes.sh 2>/dev/null; echo $?; }
+          run_git() { printf '{"tool_name":"Bash","tool_input":{"command":%s}}' "$(printf '%s' "$1" | jq -Rs .)" | plugins/ai-agent/hooks/scripts/block-git-writes.sh 2>/dev/null; echo $?; }
+          run_write() { printf '{"tool_name":"Write","tool_input":{"file_path":"x","content":%s}}' "$(printf '%s' "$1" | jq -Rs .)" | plugins/ai-agent/hooks/scripts/guard-writes.sh 2>/dev/null; echo $?; }
           [ "$(run_git 'git commit -m x')" = "2" ] || { echo "FAIL: git commit not denied"; status=1; }
           [ "$(run_git 'git push')" = "2" ] || { echo "FAIL: git push not denied"; status=1; }
           [ "$(run_git 'git push;echo done')" = "2" ] || { echo "FAIL: metachar bypass not denied"; status=1; }
@@ -103,7 +122,7 @@ jobs:
           status=0
           export CLAUDE_PROJECT_DIR="$(mktemp -d)"
           log="$CLAUDE_PROJECT_DIR/.claude/ai-agent-metrics/events.jsonl"
-          run_log() { printf '%s' "$1" | hooks/scripts/log-events.sh; echo $?; }
+          run_log() { printf '%s' "$1" | plugins/ai-agent/hooks/scripts/log-events.sh; echo $?; }
           [ "$(run_log '{"session_id":"s1","tool_name":"Skill","tool_input":{"skill":"spring-boot"}}')" = "0" ] || { echo "FAIL: log hook exited non-zero"; status=1; }
           grep -q '"event":"skill"' "$log" || { echo "FAIL: skill event not logged"; status=1; }
           run_log '{"session_id":"s1","tool_name":"Task","tool_input":{"subagent_type":"backend-springboot","prompt":"PROMPT-MUST-NOT-APPEAR"}}' > /dev/null
@@ -118,10 +137,10 @@ jobs:
           grep -q '"event":"artifact_write"' "$log" || { echo "FAIL: artifact write not logged"; status=1; }
           if grep -qE 'MUST-NOT-APPEAR' "$log"; then echo "FAIL: content/prompt leaked into log"; status=1; fi
           [ -f "$CLAUDE_PROJECT_DIR/.claude/ai-agent-metrics/.gitignore" ] || { echo "FAIL: metrics dir is not self-ignoring"; status=1; }
-          rc=$(printf '{"session_id":"s1","tool_name":"Bash","tool_input":{"command":"git push"}}' | hooks/scripts/block-git-writes.sh 2>/dev/null; echo $?)
+          rc=$(printf '{"session_id":"s1","tool_name":"Bash","tool_input":{"command":"git push"}}' | plugins/ai-agent/hooks/scripts/block-git-writes.sh 2>/dev/null; echo $?)
           [ "$rc" = "2" ] || { echo "FAIL: git push not denied with metrics enabled"; status=1; }
           grep -q '"event":"denial"' "$log" && grep -q '"rule":"git-write"' "$log" || { echo "FAIL: git-write denial not logged"; status=1; }
-          rc=$(printf '{"session_id":"s1","tool_name":"Write","tool_input":{"file_path":"x.md","content":"ssn: 123-45-6789"}}' | hooks/scripts/guard-writes.sh 2>/dev/null; echo $?)
+          rc=$(printf '{"session_id":"s1","tool_name":"Write","tool_input":{"file_path":"x.md","content":"ssn: 123-45-6789"}}' | plugins/ai-agent/hooks/scripts/guard-writes.sh 2>/dev/null; echo $?)
           [ "$rc" = "2" ] || { echo "FAIL: SSN not denied with metrics enabled"; status=1; }
           grep -q '"hook":"guard-writes"' "$log" || { echo "FAIL: guard-writes denial not logged"; status=1; }
           if grep -q '123-45-6789' "$log"; then echo "FAIL: denied value leaked into log"; status=1; fi
@@ -135,23 +154,32 @@ jobs:
           proj=$(mktemp -d)
           mkdir -p "$proj/.claude"
           printf '{"enabledPlugins":{"ai-agent@purandar-ai":true}}' > "$proj/.claude/settings.json"
-          out=$(CLAUDE_PROJECT_DIR="$proj" hooks/scripts/scaffold-dirs.sh < /dev/null)
+          out=$(CLAUDE_PROJECT_DIR="$proj" plugins/ai-agent/hooks/scripts/scaffold-dirs.sh < /dev/null)
           [ -d "$proj/docs/input-specs" ] && [ -d "$proj/docs/output-specs" ] || { echo "FAIL: dirs not scaffolded"; status=1; }
           [ -f "$proj/docs/input-specs/README.md" ] && [ -f "$proj/docs/output-specs/README.md" ] || { echo "FAIL: READMEs missing"; status=1; }
           printf '%s' "$out" | grep -q 'scaffolded' || { echo "FAIL: creation note not printed"; status=1; }
           # Idempotent: rerun is silent and never touches existing files
           printf 'custom' > "$proj/docs/input-specs/README.md"
-          out=$(CLAUDE_PROJECT_DIR="$proj" hooks/scripts/scaffold-dirs.sh < /dev/null)
+          out=$(CLAUDE_PROJECT_DIR="$proj" plugins/ai-agent/hooks/scripts/scaffold-dirs.sh < /dev/null)
           [ -z "$out" ] || { echo "FAIL: rerun not silent"; status=1; }
           [ "$(cat "$proj/docs/input-specs/README.md")" = "custom" ] || { echo "FAIL: existing README overwritten"; status=1; }
           # Unrelated repo (no plugin enablement, no docs/): must NOT scaffold
           bare=$(mktemp -d)
-          CLAUDE_PROJECT_DIR="$bare" hooks/scripts/scaffold-dirs.sh < /dev/null > /dev/null
+          CLAUDE_PROJECT_DIR="$bare" plugins/ai-agent/hooks/scripts/scaffold-dirs.sh < /dev/null > /dev/null
           [ ! -d "$bare/docs" ] || { echo "FAIL: scaffolded an unrelated repo"; status=1; }
           # Existing docs/ tree counts as opt-in even without settings.json
           mkdir -p "$bare/docs"
-          CLAUDE_PROJECT_DIR="$bare" hooks/scripts/scaffold-dirs.sh < /dev/null > /dev/null
+          CLAUDE_PROJECT_DIR="$bare" plugins/ai-agent/hooks/scripts/scaffold-dirs.sh < /dev/null > /dev/null
           [ -d "$bare/docs/input-specs" ] && [ -d "$bare/docs/output-specs" ] || { echo "FAIL: docs-tree repo not scaffolded"; status=1; }
+          # Context-pointer repo: enablement present but a pointer file means docs
+          # live in the context repo — the hook must scaffold NOTHING locally
+          ptr=$(mktemp -d)
+          mkdir -p "$ptr/.claude"
+          printf '{"enabledPlugins":{"ai-agent@purandar-ai":true}}' > "$ptr/.claude/settings.json"
+          printf '{"contextRoot":"../project-context/docs"}' > "$ptr/.claude/ai-agent.json"
+          out=$(CLAUDE_PROJECT_DIR="$ptr" plugins/ai-agent/hooks/scripts/scaffold-dirs.sh < /dev/null)
+          [ -z "$out" ] || { echo "FAIL: pointer repo produced output"; status=1; }
+          [ ! -d "$ptr/docs" ] || { echo "FAIL: pointer repo was scaffolded locally"; status=1; }
           exit $status
 
       - name: Metrics aggregation smoke test
@@ -160,7 +188,7 @@ jobs:
           base=$(mktemp -d)
           mkdir -p "$base/repo-a/docs" "$base/repo-b"
           printf '| Date | Ticket | Mode | PASS | WARN | FAIL | NO-DATA | Denials | Notes |\n|---|---|---|---|---|---|---|---|---|\n| 2026-08-01 | AB-1 | full | 3 | 1 | 0 | 0 | 0 | clean |\n| 2026-08-02 | AB-2 | full | 4 | 0 | 1 | 0 | 1 | denial seen |\n| malformed |\n' > "$base/repo-a/docs/agent-metrics.md"
-          out=$(scripts/aggregate-metrics.sh "$base/repo-a" "$base/repo-b" "$base/nope")
+          out=$(plugins/ai-agent/scripts/aggregate-metrics.sh "$base/repo-a" "$base/repo-b" "$base/nope")
           echo "$out" | grep -qE '\| repo-a \| 2 \| 7 \| 1 \| 1 \| 0 \| 1 \|' || { echo "FAIL: repo-a totals wrong"; status=1; }
           echo "$out" | grep -qE '\| \*\*TOTAL\*\* \| 2 \| 7 \| 1 \| 1 \| 0 \| 1 \|' || { echo "FAIL: TOTAL wrong"; status=1; }
           echo "$out" | grep -q 'repo-b | no data' || { echo "FAIL: no-data repo not listed"; status=1; }
@@ -196,16 +224,16 @@ jobs:
               z.writestr("xl/worksheets/sheet1.xml", s1)
               z.writestr("xl/worksheets/sheet2.xml", s2)
           PYEOF
-          [ "$(scripts/xlsx-extract.py --list "$work/fixture.xlsx")" = "$(printf 'Stories\nBilling')" ] || { echo "FAIL: --list wrong"; status=1; }
-          out=$(scripts/xlsx-extract.py "$work/fixture.xlsx")
+          [ "$(plugins/ai-agent/scripts/xlsx-extract.py --list "$work/fixture.xlsx")" = "$(printf 'Stories\nBilling')" ] || { echo "FAIL: --list wrong"; status=1; }
+          out=$(plugins/ai-agent/scripts/xlsx-extract.py "$work/fixture.xlsx")
           echo "$out" | grep -q '^# sheet: Stories$' && echo "$out" | grep -q '^# sheet: Billing$' || { echo "FAIL: sheet headers missing"; status=1; }
           echo "$out" | grep -q "$(printf 'Auth\trich text\t3\t2025-08-01')" || { echo "FAIL: shared/rich/number/date row wrong"; status=1; }
           echo "$out" | grep -q "$(printf 'a b\\\\nc\t\t\tTRUE')" || { echo "FAIL: escaping/gap/boolean row wrong"; status=1; }
-          [ "$(scripts/xlsx-extract.py "$work/fixture.xlsx" Billing | wc -l)" -eq 2 ] || { echo "FAIL: single-sheet select wrong"; status=1; }
-          rc=$(scripts/xlsx-extract.py "$work/fixture.xlsx" Nope 2>/dev/null; echo $?)
+          [ "$(plugins/ai-agent/scripts/xlsx-extract.py "$work/fixture.xlsx" Billing | wc -l)" -eq 2 ] || { echo "FAIL: single-sheet select wrong"; status=1; }
+          rc=$(plugins/ai-agent/scripts/xlsx-extract.py "$work/fixture.xlsx" Nope 2>/dev/null; echo $?)
           [ "$rc" = "1" ] || { echo "FAIL: missing sheet not an error"; status=1; }
           printf 'plain' > "$work/notzip.xlsx"
-          rc=$(scripts/xlsx-extract.py "$work/notzip.xlsx" 2>/dev/null; echo $?)
+          rc=$(plugins/ai-agent/scripts/xlsx-extract.py "$work/notzip.xlsx" 2>/dev/null; echo $?)
           [ "$rc" = "1" ] || { echo "FAIL: non-zip not an error"; status=1; }
           exit $status
 
@@ -226,3 +254,22 @@ jobs:
             echo "FAIL: machine-specific absolute path found; agents must discover paths at runtime"
             exit 1
           fi
+
+      - name: No cross-plugin file references
+        run: |
+          # ${CLAUDE_PLUGIN_ROOT} resolves to each plugin's OWN root: a stack plugin
+          # referencing core content (or core referencing stack agents) by file path
+          # dangles at runtime. Cross-plugin loads go through namespaced Skill
+          # invocations; cross-plugin agent launches go by bare agent name.
+          status=0
+          if grep -rnE 'CLAUDE_PLUGIN_ROOT\}?/(skills/(shared-standards|hipaa|audit-logging)|templates/|scripts/|\.claude-plugin/plugin\.json)' \
+            plugins/ai-agent-backend plugins/ai-agent-frontend; then
+            echo "FAIL: stack plugin references core content by CLAUDE_PLUGIN_ROOT path"
+            status=1
+          fi
+          if grep -rnE 'CLAUDE_PLUGIN_ROOT\}?/agents/(backend-springboot|frontend-react)' \
+            plugins/ai-agent; then
+            echo "FAIL: core references a stack agent definition by CLAUDE_PLUGIN_ROOT path"
+            status=1
+          fi
+          exit $status

@@ -1,0 +1,8 @@
+{
+  "name": "ai-agent-backend",
+  "description": "Java/Spring Boot implementer for the Thinkitive AI agent suite: the backend-springboot agent and the spring-boot engineering-standards skill. Requires the ai-agent core plugin.",
+  "version": "2.0.0",
+  "author": {
+    "name": "CoThink AI"
+  }
+}
