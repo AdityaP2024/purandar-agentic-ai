@@ -4,7 +4,27 @@ All notable changes to the purandar-ai plugin suite. Versioning follows semver v
 each plugin's `.claude-plugin/plugin.json` — the three plugins version in lockstep;
 consuming projects pick up releases with `/plugin marketplace update`.
 
-## 2.0.0 — Unreleased
+## 2.0.1 — 2026-08-24
+
+### Commands
+- `/implement` step 2f is now topology-aware. Previously a mixed (cross-stack) spec refused to
+  run in a repo that enables only one stack plugin — exactly the shape the multi-repo topology
+  creates on purpose. Now: all needed stacks available → proceed; SOME available → implement
+  this repo's scope and DEFER the other stack's rows to `/implement <KEY>` in the sibling repo
+  (the designed handoff, not an error — Section 7 ordering still governs); NONE available →
+  stop with enable-or-go-to-the-right-repo instructions.
+- New approval-gated cross-stack handoff comment — the ONE deliberate exception to the plugin
+  suite's read-only Jira posture. When `/implement` finishes one stack of a mixed ticket and
+  defers the rest, it drafts a metadata-only Jira comment (ACs done, files count, Section 7
+  states, where to run the remaining half; never requirement text with personal-data values)
+  and asks: Post to Jira / Copy-paste myself / Skip. It posts ONLY the approved text, only on
+  explicit approval, via the developer's own Atlassian connector; without the connector it
+  hands over the draft to paste. Every other Jira touchpoint remains read-only.
+- CHANGELOG housekeeping: the 2.0.0 heading below is dated (it shipped 2026-08-24 with the
+  heading still reading "Unreleased" — the tag is correct and unmoved; consumers install by
+  plugin.json version).
+
+## 2.0.0 — 2026-08-24
 
 ### BREAKING — one plugin becomes three
 - The single `ai-agent` plugin splits into a three-plugin marketplace hosted in this same repo:

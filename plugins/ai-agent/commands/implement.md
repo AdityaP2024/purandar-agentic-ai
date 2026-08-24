@@ -1,6 +1,6 @@
 ---
 name: implement
-description: Implement an APPROVED tech-spec at docs/tickets/<KEY>/tech-spec.md via the backend-springboot and frontend-react agents — backend first, then frontend once its Section 7 dependencies are RESOLVED. Refuses to run while the spec's Approval Status is DRAFT; the plan gate precedes any code; the developer commits — the plugin never does.
+description: Implement an APPROVED tech-spec at docs/tickets/<KEY>/tech-spec.md via the backend-springboot and frontend-react agents — backend first, then frontend once its Section 7 dependencies are RESOLVED. In a repo that enables only one stack plugin, implements that stack's scope and defers the rest to the sibling repo, closing with an approval-gated Jira handoff comment. Refuses to run while the spec's Approval Status is DRAFT; the plan gate precedes any code; the developer commits — the plugin never does.
 argument-hint: <TICKET-KEY>
 ---
 
@@ -114,16 +114,29 @@ reviews and commits.
       not need Jira. Note its availability only as an informational fact for the launch prompts.
 
    f. **Stack-agent availability.** The implementer agents ship in separate stack plugins; the
-      work split (2d) says which are needed this run: `backend-springboot` for any
+      work split (2d) says which stacks the spec needs: `backend-springboot` for any
       BACKEND-REQUIRED or CROSS-STACK row, `frontend-react` for any FRONTEND-ONLY or CROSS-STACK
-      row. Verify each needed agent is available for launch (it appears in this session's agent
-      roster). If one is not, print exactly this — substituting the stack and plugin — and STOP
-      before any plan gate:
+      row. Check which of the needed agents are available for launch (they appear in this
+      session's agent roster). Three outcomes:
 
-      > /implement cannot start: this spec requires {backend|frontend} work, but the
-      > {ai-agent-backend|ai-agent-frontend} plugin is not enabled in this repo. Run /setup-repo
-      > (or add "{ai-agent-backend|ai-agent-frontend}@purandar-ai": true to enabledPlugins in
-      > .claude/settings.json), start a fresh session, and rerun /implement <KEY>.
+      - **All needed agents available** — proceed normally.
+      - **Some available** — the expected shape in the multi-repo topology, where a code repo
+        deliberately enables only its own stack. Proceed with THIS repo's scope only: the other
+        stack's rows are DEFERRED to a run of `/implement <KEY>` in that stack's repo — this is
+        the designed handoff, not an error. Say so now, in one line ("{n} {frontend|backend}
+        row(s) deferred to the {frontend|backend} repo"), and step 8's closing carries the
+        handoff. The cross-stack hard gate still governs ordering: work blocked by an UNRESOLVED
+        Section 7 row stays blocked until the developer flips it RESOLVED, whichever repo the
+        unblocking work lands in — the spec in the shared context repo is the single source of
+        truth both repos read.
+      - **None available** — STOP before any plan gate with exactly this, substituting the
+        stack(s) and plugin(s):
+
+        > /implement cannot start: this spec requires {backend|frontend} work, but the
+        > {ai-agent-backend|ai-agent-frontend} plugin is not enabled in this repo. Either run
+        > /implement <KEY> in the repo that has it, or run /setup-repo here (or add
+        > "{ai-agent-backend|ai-agent-frontend}@purandar-ai": true to enabledPlugins in
+        > .claude/settings.json), start a fresh session, and rerun /implement <KEY>.
 
 3. **Determine the execution plan and confirm it.** Backend work is implemented first:
 
@@ -243,7 +256,29 @@ reviews and commits.
 
      Follow with any deferred work and what unblocks it: the Section 7 rows still UNRESOLVED,
      that the developer marks them RESOLVED (through this command's step 5 transition or by
-     editing the spec), and that rerunning `/implement <KEY>` picks the deferred work up.
+     editing the spec), and that rerunning `/implement <KEY>` picks the deferred work up — in
+     the repo whose stack it belongs to, when rows were deferred cross-repo (step 2f).
+
+     **Cross-repo handoff comment (approval-gated Jira write — the ONE exception to the
+     plugin's read-only Jira posture).** When this run implemented one stack of a mixed ticket
+     and deferred the other stack's rows to the sibling repo (step 2f "some available"), draft
+     a handoff comment for the Jira ticket, exactly this shape (metadata only — file paths, AC
+     ids, and row states; NEVER requirement text with personal-data values, per the hipaa
+     rules):
+
+     > [ai-agent handoff] {Backend|Frontend} half of this ticket implemented in the
+     > {backend|frontend} repo: ACs {ids} ({n} files). Section 7 rows {ids} flipped RESOLVED /
+     > pending developer review. Remaining: ACs {ids} ({frontend|backend}) — run
+     > /implement {KEY} in the {frontend|backend} repo. Spec and implementation report:
+     > docs/tickets/{KEY}/ in the project-context repo.
+
+     Show the draft and ask (AskUserQuestion): **Post to Jira (Recommended)** / **Copy-paste
+     myself** / **Skip**. Post ONLY on explicit approval, via the developer's own Atlassian
+     connector (their OAuth — the same access `/research-ticket` reads with); posting anything
+     other than the approved text, or posting without the question, is a contract violation.
+     If the connector is unavailable this session, do not ask — present the draft as
+     copy-paste text with one line saying why. This comment is the only Jira write anywhere in
+     the plugin suite; every other Jira touchpoint remains read-only.
 
    - **Nothing was written** (an aborted plan gate, a declined step 3 confirmation, an immediate
      stop, or nothing launchable): say exactly that in one line — "Nothing was written this run:
