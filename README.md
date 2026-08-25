@@ -11,7 +11,7 @@ agent definitions, and vice versa:
 
 | Plugin | Ships | Enable it in |
 |---|---|---|
-| `ai-agent` (core) | All 6 pipeline/review agents, all 8 commands, shared-standards + hipaa + audit-logging skills, all templates, all safety/observability hooks, the helper scripts | Every repo using the suite |
+| `ai-agent` (core) | All 6 pipeline/review agents, all 9 commands, shared-standards + hipaa + audit-logging skills, all templates, all safety/observability hooks, the helper scripts | Every repo using the suite |
 | `ai-agent-backend` | `backend-springboot` implementer agent + spring-boot skill | Backend (Java/Spring Boot) code repos |
 | `ai-agent-frontend` | `frontend-react` implementer agent + react skill | Frontend (React) code repos |
 
@@ -60,8 +60,8 @@ parent/
 | `agent-auditor` | ai-agent | Grades how the pipeline handled a ticket: event-log process checks + template conformance | Read-only; writes scorecard + trend row only |
 
 Agent names are globally unique across the suite; commands launch them by bare
-name. `/implement` preflights that the stack plugin its spec needs is enabled
-and stops with enable instructions when it is not.
+name. `/implement` and `/implement-batch` preflight that the stack plugin a
+spec needs is enabled and stop with enable instructions when it is not.
 
 ## Commands
 
@@ -76,6 +76,7 @@ in single-repo mode that is the repo itself; with a pointer, the shared sibling.
 | `/research-ticket <KEY>` | Full ticket excavation via Atlassian MCP (read-only) | `docs/tickets/<KEY>/research.md` |
 | `/create-spec <KEY>` | Research (or inline lightweight research) to tech spec | `docs/tickets/<KEY>/tech-spec.md` |
 | `/implement <KEY>` | Implements the approved spec with the stack-appropriate agent | Code + tests |
+| `/implement-batch [<KEY> ...]` | Implements several APPROVED tickets in one run — each on its own `feature/<KEY>` branch in its own `.worktrees/<KEY>` git worktree, in parallel (max 5 per run, 3 agents in flight), same agents and gates as `/implement`. Frontier-only: tickets blocked by unmerged work or touching the same files are deferred with the unblock step named. No keys → pick interactively (manual, or your open-sprint To Do tickets) | Code + tests per branch, `docs/tickets/<KEY>/implementation-report.md` per ticket |
 | `/hipaa-check [path]` | Standalone compliance scan, usable any time | Severity-ranked report |
 | `/agent-audit <KEY>` | Grades pipeline process + artifact conformance for one ticket (report-only) | `docs/tickets/<KEY>/audit.md`, row in `docs/agent-metrics.md` |
 
@@ -95,14 +96,20 @@ Requirement change: update the documents in docs/input-specs/ -> /onboard-projec
 Story iteration:    drop user stories (.xlsx) in docs/input-specs/ -> /gap-analysis -> resolve gaps (recorded as GAP- decisions) -> fix inputs -> repeat until every module is ALIGNED and FINAL
 Once per developer: accept plugin install prompt -> authorize Atlassian connector (OAuth); Figma connector when designs live in Figma
 Per ticket:         [/research-ticket] -> /create-spec -> review spec -> /implement -> review diff -> PR
+Ticket batch:       approve the specs -> /implement-batch -> approve plans -> review each feature/<KEY> branch -> commit + PR each -> merge -> rerun for the deferred wave
 ```
 
 Human checkpoints: the developer approves the spec (spec approval gate), the
 implementation plan (plan gate), and reviews the final diff. Jira access is
 read-only, with ONE approval-gated exception: after implementing one stack of a
-cross-stack ticket in the multi-repo topology, `/implement` drafts a handoff
+cross-stack ticket in the multi-repo topology, `/implement` (and `/implement-batch`,
+which batches the same drafts) drafts a handoff
 comment and — only on the developer's explicit approval of the exact text —
-posts it to the ticket via the developer's own Atlassian connector. Figma
+posts it to the ticket via the developer's own Atlassian connector. Git has ONE
+carve-out to the same shape: `/implement-batch` may run `git fetch` and
+`git worktree add` (creating each ticket's disposable worktree and branch, only
+after its batch gate is confirmed) — commits, pushes, tags, and PRs remain the
+developer's alone, hook-enforced everywhere including inside worktrees. Figma
 access — used to read design frames behind Figma links — is
 read-only through each developer's own Figma connector, and without it agents
 request exported frames instead of guessing. All generated artifacts are
@@ -203,7 +210,7 @@ plugins/ai-agent/             the CORE plugin
   .claude-plugin/plugin.json
   agents/                     6 agent definitions (YAML frontmatter: name, description with
                               dispatch examples; tool posture enforced by body hard rules)
-  commands/                   all 8 slash-command workflows (the orchestration layer)
+  commands/                   all 9 slash-command workflows (the orchestration layer)
   skills/                     shared-standards, hipaa, audit-logging
   templates/                  locked output formats: research, tech-spec, project-brief,
                               gap-report, decisions log

@@ -84,12 +84,16 @@ time, per the spring-boot skill's Discovery Preamble.
 
 ## Inputs
 
-The launching command (`/implement`) tells you: the ticket key; that `docs/tickets/<KEY>/tech-spec.md`
-exists; the scope of this run (all backend work, or a named subset of Section 5 operations);
-whether this launch carries a developer decision for a previously fired gate (plan approval,
-plan revision instructions, a dependency approval, or a conflict resolution) and its content;
-whether `docs/output-specs/PROJECT_BRIEF.md` exists under the context root; and whether
-`docs/tickets/<KEY>/research.md` exists. Verify each file fact on disk before relying on it.
+The launching command (`/implement` or `/implement-batch`) tells you: the ticket key; that
+`docs/tickets/<KEY>/tech-spec.md` exists; the scope of this run (all backend work, or a named
+subset of Section 5 operations); whether this launch carries a developer decision for a
+previously fired gate (plan approval, plan revision instructions, a dependency approval, or a
+conflict resolution) and its content; whether `docs/output-specs/PROJECT_BRIEF.md` exists under
+the context root; whether `docs/tickets/<KEY>/research.md` exists; and — batch runs only — a
+SOURCE ROOT (`.worktrees/<KEY>`, a git worktree of this repo on branch `feature/<KEY>`), governed
+by the shared-standards Source Root rule: every source path, stack-fact discovery, build, and
+test runs against and under it, and you never touch source files outside it. Verify each file
+fact on disk before relying on it.
 
 ## Hard Rules
 
@@ -494,3 +498,4 @@ task is not done.
 | Date | Change | Author |
 |---|---|---|
 | 2026-07-21 | Initial version | ai-agent plugin |
+| 2026-08-25 | Inputs: /implement-batch added as a launching command; optional SOURCE ROOT fact (batch worktree) per the shared-standards Source Root rule | ai-agent plugin |

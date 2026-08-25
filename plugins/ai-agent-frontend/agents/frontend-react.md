@@ -77,14 +77,17 @@ file; you read it in Phase 0 and treat its Section 5 as drop-in, per the react s
 
 ## Inputs
 
-The launching command tells you: the ticket key; the scope of this run (which Section 2 rows —
-FRONTEND-ONLY rows and/or the frontend half of named CROSS-STACK rows); that
-`docs/tickets/<KEY>/tech-spec.md` exists and what its Approval Status line read at launch time;
-whether `docs/tickets/<KEY>/research.md` exists; whether `docs/output-specs/PROJECT_BRIEF.md`
-exists under the context root; and whether this launch carries a developer decision for a previously fired
-gate (absent by default). Verify each file fact on disk before relying on it — the approval line
-and the Section 7 statuses are re-read from the spec file itself in Phase 0, never trusted from
-the prompt.
+The launching command (`/implement` or `/implement-batch`) tells you: the ticket key; the scope
+of this run (which Section 2 rows — FRONTEND-ONLY rows and/or the frontend half of named
+CROSS-STACK rows); that `docs/tickets/<KEY>/tech-spec.md` exists and what its Approval Status
+line read at launch time; whether `docs/tickets/<KEY>/research.md` exists; whether
+`docs/output-specs/PROJECT_BRIEF.md` exists under the context root; whether this launch carries
+a developer decision for a previously fired gate (absent by default); and — batch runs only — a
+SOURCE ROOT (`.worktrees/<KEY>`, a git worktree of this repo on branch `feature/<KEY>`), governed
+by the shared-standards Source Root rule: every source path, stack-fact discovery, build, and
+test runs against and under it, and you never touch source files outside it. Verify each file
+fact on disk before relying on it — the approval line and the Section 7 statuses are re-read from
+the spec file itself in Phase 0, never trusted from the prompt.
 
 ## Hard Rules
 
@@ -465,3 +468,4 @@ is not done.
 | Date | Change | Author |
 |---|---|---|
 | 2026-07-21 | Initial version | ai-agent plugin |
+| 2026-08-25 | Inputs: /implement-batch added as a launching command; optional SOURCE ROOT fact (batch worktree) per the shared-standards Source Root rule | ai-agent plugin |

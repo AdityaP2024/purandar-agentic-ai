@@ -4,6 +4,57 @@ All notable changes to the purandar-ai plugin suite. Versioning follows semver v
 each plugin's `.claude-plugin/plugin.json` — the three plugins version in lockstep;
 consuming projects pick up releases with `/plugin marketplace update`.
 
+## 2.1.0 — 2026-08-25
+
+### New command: /implement-batch — parallel ticket implementation in git worktrees
+- Implements several APPROVED tickets in one run, each on its own `feature/<KEY>` branch in its
+  own `.worktrees/<KEY>` git worktree, launched in parallel via the SAME stack agents and gate
+  mechanics as `/implement` (plan gate always first, gate reports relayed, relaunch with the
+  developer's decision). No new agent: selection (explicit keys, or interactively — manual
+  entry or the developer's open-sprint To Do tickets via JQL), per-ticket preflight, dependency
+  analysis, scheduling, and all reserved writes are main-session command logic.
+- **Frontier-only scheduling.** Each run implements only tickets that are ready NOW; everything
+  else is DEFERRED with the reason and unblock step named (no spec, spec not approved, blocked
+  by an unfinished Jira-linked issue, footprint conflict, over cap, leftover branch/worktree).
+  Dependencies come from two layers: Jira `is blocked by` links (read-only; skipped with a loud
+  warning if the MCP is unavailable) and deterministic file-footprint intersection of the
+  specs' Section 4 Affected Components — two tickets touching the same file are never built
+  from the same base in one run, because their branches would collide at merge time regardless
+  of scheduling. Plan-gate reports are cross-checked the same way before implementation, so
+  overlap the specs did not predict (test files, shared configs) is caught too. Blocked
+  tickets are never chained onto unreviewed branches; merging and rerunning is the wave
+  mechanism.
+- **Hard caps: 5 tickets per run, 3 agents in flight** — lowerable at the batch gate, never
+  raisable. Parallelism buys wall-clock time, not fewer tokens; the caps protect the
+  developer's rate-limit window, machine (simultaneous builds), and review capacity.
+- **The git carve-out — the suite's ONE exception to "the plugin runs no state-changing git".**
+  `/implement-batch` may run exactly `git fetch` and `git worktree add .worktrees/<KEY> -b
+  feature/<KEY> <base>`, both only after the batch gate explicitly approves the listed
+  operations. Commits, pushes, tags, and PRs remain the developer's alone — block-git-writes
+  already passes `worktree add`/`fetch` and keeps denying `commit`/`push`/`tag`/`gh pr`
+  everywhere, including inside worktrees (no hook change needed). The command never removes a
+  worktree or deletes a branch; cleanup commands are handed to the developer, and an aborted
+  ticket's worktree + branch delete without a trace.
+- **Lean closing, durable detail.** The chat closing is one table (ticket, outcome, branch,
+  tests) plus the review loop, deferred-wave steps, and cleanup commands. Each ticket's full
+  Phase 7 report is appended by the main session to a new artifact,
+  `docs/tickets/<KEY>/implementation-report.md` in the context repo (dated run sections;
+  agents never write it). Decision-log drafts from parallel agents are renumbered to the next
+  free IDs at append time (announced), so concurrent drafts cannot collide. Cross-repo Jira
+  handoff comments are batched under the same 2.0.1 approval gate.
+
+### Contracts
+- shared-standards: new **Source Root** rule in the Context Root section (a launch prompt may
+  pin an agent to a `.worktrees/<KEY>` worktree — source paths, stack discovery, builds, and
+  tests run against it; `docs/` paths keep resolving under the shared context root; the
+  worktree's own pointer copy is ignored); Artifact Conventions gains the
+  implementation-report row; the gates table and roster name `/implement-batch`.
+- Stack agents (backend-springboot, frontend-react): Inputs accept `/implement-batch` as a
+  launching command and the optional SOURCE ROOT fact. No behavioral change outside batch runs.
+- `.worktrees/` ignore guard: the batch preflight checks `git check-ignore .worktrees` and, at
+  the batch gate, offers the one-line `.gitignore` append when missing (`/setup-repo` is
+  unchanged — its two-file contract holds).
+
 ## 2.0.1 — 2026-08-24
 
 ### Commands

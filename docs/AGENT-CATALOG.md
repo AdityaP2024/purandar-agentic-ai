@@ -12,7 +12,11 @@ does when it runs, and where its authority stops. The pipeline the agents form:
 `/research-ticket` is optional — `/create-spec` performs its own inline lightweight research
 when no research file exists. Two approval gates are always mandatory: the spec approval gate
 (the developer approves the tech-spec before `/implement` runs) and the plan gate (inside
-`/implement`, before any code is written).
+`/implement`, before any code is written). `/implement-batch` runs the same implement stage for
+several APPROVED tickets at once — each in its own `.worktrees/<KEY>` git worktree on its own
+`feature/<KEY>` branch, launched in parallel under the same agents and gates, frontier-only
+(blocked or file-overlapping tickets defer to the next run) and capped at 5 tickets / 3 agents
+in flight.
 
 The suite ships as three plugins from one marketplace: `ai-agent` (core) carries every agent
 below except the two implementers, which ship in `ai-agent-backend` and `ai-agent-frontend` so
@@ -27,8 +31,8 @@ Context Root rule): the repo's own `docs/` by default, or the sibling context re
 | `gap-analyst` | ai-agent | `/gap-analysis` | Compares the module-wise user-story workbooks against the brief into the regenerated `GAP_ANALYSIS.md` gap report |
 | `jira-researcher` | ai-agent | `/research-ticket` | Excavates a Jira ticket read-only into `docs/tickets/<KEY>/research.md` |
 | `spec-writer` | ai-agent | `/create-spec` | Turns ticket plus research into the locked-template tech spec, ending at the spec approval gate |
-| `frontend-react` | ai-agent-frontend | `/implement` | Implements the frontend (React/TypeScript) half of an approved spec |
-| `backend-springboot` | ai-agent-backend | `/implement` | Implements the backend (Java/Spring Boot) half of an approved spec, backend first |
+| `frontend-react` | ai-agent-frontend | `/implement`, `/implement-batch` | Implements the frontend (React/TypeScript) half of an approved spec |
+| `backend-springboot` | ai-agent-backend | `/implement`, `/implement-batch` | Implements the backend (Java/Spring Boot) half of an approved spec, backend first |
 | `hipaa-compliance` | ai-agent | `/hipaa-check` | Read-only PHI and audit-coverage review; its entire output is its report |
 | `agent-auditor` | ai-agent | `/agent-audit` | Grades pipeline process (event log) + artifact conformance (templates) into a per-ticket scorecard and a trend row |
 
@@ -225,7 +229,8 @@ Authored for the ai-agent plugin v1.0.0, 2026-07-21.
 
 - Command: `/implement <TICKET-KEY>` — launched for FRONTEND-ONLY acceptance criteria and the
   frontend half of CROSS-STACK work once the blocking Section 7 rows are RESOLVED (backend
-  implements first).
+  implements first). `/implement-batch` launches it the same way, once per ticket, each run
+  pinned to that ticket's `.worktrees/<KEY>` source root.
 - Natural-language dispatch, from the agent's own examples: "PLAT-421's spec is approved and
   every AC is FRONTEND-ONLY — build it"; "The backend endpoints for MEM-88 are merged and
   reviewed, and the Section 7 rows are marked RESOLVED — do the React half now." Asking it to
@@ -287,7 +292,8 @@ Authored for the ai-agent plugin v1.0.0, 2026-07-21.
 ### How to invoke it
 
 - Command: `/implement <TICKET-KEY>` — launched first for BACKEND-REQUIRED acceptance criteria
-  and the backend half of CROSS-STACK work.
+  and the backend half of CROSS-STACK work. `/implement-batch` launches it the same way, once
+  per ticket, each run pinned to that ticket's `.worktrees/<KEY>` source root.
 - Natural-language dispatch, from the agent's own examples: "The tech spec for PLAT-421 is
   approved — implement the backend portion"; "Build the new referral endpoint and its
   migration from MEM-1204's spec"; "BILL-88 is cross-stack — get the backend done first so the

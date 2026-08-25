@@ -6,7 +6,7 @@ stack implementers:
 - **Agents**: doc-analyst, gap-analyst, jira-researcher, spec-writer,
   hipaa-compliance, agent-auditor
 - **Commands**: /setup-repo, /onboard-project, /gap-analysis, /research-ticket,
-  /create-spec, /implement, /hipaa-check, /agent-audit
+  /create-spec, /implement, /implement-batch, /hipaa-check, /agent-audit
 - **Skills**: shared-standards, hipaa, audit-logging
 - **Templates**: the locked output contracts (brief, gap report, research,
   tech spec, decisions log)
