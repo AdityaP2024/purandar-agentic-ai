@@ -22,6 +22,10 @@ command relays.
 Neither this command nor any implementer ever runs `git commit` or `git push`. The developer
 reviews and commits.
 
+To implement SEVERAL ready tickets at once — each on its own branch in its own git worktree,
+in parallel — use `/implement-batch`; it wraps this same per-ticket machinery and gate mechanics
+in a frontier-only scheduler.
+
 ## Instructions
 
 1. **Parse the argument.** `$ARGUMENTS` must contain exactly one Jira issue key: a project key of

@@ -27,7 +27,10 @@ that does not resolve stops every command with instructions; nothing falls back 
   - NOT needed for: `/onboard-project` or `/hipaa-check`, and `/implement` needs it only to
     post the optional cross-stack handoff comment (without the connector it hands you the
     comment text to paste yourself — implementation itself never touches Jira). You can onboard a
-    project and implement approved specs without the connector.
+    project and implement approved specs without the connector. `/implement-batch` degrades the
+    same way: without the connector, sprint-based selection is unavailable (enter keys instead)
+    and Jira dependency links go unchecked (a loud warning — spec footprint conflicts are still
+    checked); implementation itself proceeds.
 - **python3 on PATH** — OPTIONAL. Needed only by `/gap-analysis`, whose workbook extractor is
   python3 standard library alone (no packages to install); every other command runs without it.
 - **Figma connector authorized** (claude.ai connector settings) — OPTIONAL. Needed only when the
@@ -190,6 +193,39 @@ command's resolution pass.
    code appears inside the report for you (or a later `/implement` run) to apply.
 6. **Review the diff and commit.** You review, you commit the code together with the
    `docs/tickets/<KEY>/` artifacts, you open the PR. The plugin never commits for you.
+
+### Closing several tickets at once: /implement-batch
+
+When several tickets have APPROVED specs, `/implement-batch PLAT-421 PLAT-422 BILL-88` (or with
+no keys: pick interactively — enter keys, or pull your open-sprint To Do tickets) runs the
+implement stage for all of them in one sitting:
+
+1. **It proves the batch is safe first.** Per ticket it re-runs `/implement`'s preflight, then
+   checks Jira `is blocked by` links and intersects the specs' Section 4 file footprints. A
+   ticket blocked by unfinished work, or touching a file another ticket touches, is DEFERRED
+   with the unblock step named — two branches from the same base editing the same file would
+   collide at merge time no matter how they were scheduled. Caps: 5 tickets per run, 3 agents
+   in flight (lowerable at the batch gate, never raisable).
+2. **The batch gate.** You see the active set, every deferral and its reason, the base commit,
+   and the exact git operations planned — then approve. Only after that does the command run
+   the suite's one git carve-out: `git fetch` plus `git worktree add .worktrees/<KEY> -b
+   feature/<KEY>` per ticket. Commits, pushes, tags, and PRs stay yours alone — the safety hook
+   keeps denying them everywhere, worktrees included.
+3. **Plan gates, batched.** Every ticket's implementer stops at its plan gate as always; you
+   approve, revise, or abort each plan in one batched sitting, and plans are cross-checked for
+   file overlaps the specs did not predict.
+4. **Parallel implementation.** Approved tickets build simultaneously, each agent pinned to its
+   own worktree. Each ticket's full report is written to
+   `docs/tickets/<KEY>/implementation-report.md` in the context repo; the chat closing is one
+   lean table — ticket, outcome, branch, tests.
+5. **Your review loop.** Per branch: `cd .worktrees/<KEY>` → review → commit → push → PR. After
+   each merge: `git worktree remove .worktrees/<KEY>` and `git branch -d feature/<KEY>`. Then
+   merge and rerun `/implement-batch` for the deferred wave. An aborted ticket's worktree and
+   branch delete without a trace — nothing leaks into your main tree.
+
+Parallel here buys wall-clock time, not fewer tokens — five tickets cost roughly five
+`/implement` runs either way. The caps exist to protect your rate-limit window, your machine
+(simultaneous builds), and your own review capacity.
 
 ## 5. Smoke test
 

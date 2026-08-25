@@ -80,10 +80,10 @@ NEVER silently degrade. NEVER use hidden fallbacks (alternate APIs, cached guess
 
 | Gate | Where | Behavior |
 |---|---|---|
-| spec approval gate | between `/create-spec` and `/implement` | Developer MUST approve the tech-spec before any implementation starts. |
-| plan gate | inside `/implement`, before writing code | Present: Files to Create / Files to Modify / Existing Code Reused / Risks. Wait for approval. |
+| spec approval gate | between `/create-spec` and `/implement` / `/implement-batch` | Developer MUST approve the tech-spec before any implementation starts. |
+| plan gate | inside `/implement` and `/implement-batch`, before writing code | Present: Files to Create / Files to Modify / Existing Code Reused / Risks. Wait for approval. |
 | conflict gate | anywhere sources disagree beyond the matrix | Never silently pick a side — quote both sides, ask the user. |
-| cross-stack hard gate | tech-spec Section 7, during `/implement` | Any UNRESOLVED dependency row stops dependent work — no mocks, stubs, or workarounds. Lifts only when the developer marks it resolved. |
+| cross-stack hard gate | tech-spec Section 7, during `/implement` and `/implement-batch` | Any UNRESOLVED dependency row stops dependent work — no mocks, stubs, or workarounds. Lifts only when the developer marks it resolved. |
 
 ## Severity Taxonomies and Output Contracts
 
@@ -141,6 +141,16 @@ skills, and templates means `<context root>/<rest>`. When no pointer exists the 
 exception: `.claude/ai-agent-metrics/events.jsonl` is not a `docs/` path — it always stays in
 the repo the session runs in.
 
+**Source root (batch worktrees):** `/implement-batch` gives each ticket an isolated git worktree
+(`.worktrees/<KEY>`, branch `feature/<KEY>`) and names it in the launch prompt as that run's
+SOURCE ROOT. When a launch prompt carries a source root: every source-code path resolves under
+it, stack facts are discovered from ITS build files, and every build and test command runs with
+it as the working directory — the agent never touches source files outside it. `docs/` paths are
+unaffected: they keep resolving under the context root above, which is shared by every ticket in
+the batch. The worktree's own copy of `.claude/ai-agent.json` is ignored — the launching command
+resolved the pointer exactly once, from the session repo's root. No source root in the prompt →
+the source root is the session repo itself, exactly as before.
+
 ## Artifact Conventions
 
 Everything generated is committed to the **context repo** (per Context Root above) at these
@@ -155,6 +165,7 @@ canonical paths:
 | Gap report | `docs/output-specs/GAP_ANALYSIS.md` (regenerated whole per run) |
 | Ticket research | `docs/tickets/<KEY>/research.md` |
 | Tech spec | `docs/tickets/<KEY>/tech-spec.md` |
+| Implementation report | `docs/tickets/<KEY>/implementation-report.md` (appended per run by the /implement-batch main session from each implementer's Phase 7 report; agents never write it) |
 | Decision log | `docs/decisions.md` (append-only) |
 
 Templates in this plugin's `templates/` directory are **locked contracts**:
@@ -172,7 +183,7 @@ Overwriting any existing generated artifact requires diff + approval (Hard Rule 
 ## Roster (exact names)
 
 Agents: `doc-analyst`, `gap-analyst`, `jira-researcher`, `spec-writer`, `frontend-react` (ships in the ai-agent-frontend plugin), `backend-springboot` (ships in the ai-agent-backend plugin), `hipaa-compliance`, `agent-auditor`.
-Commands: `/setup-repo`, `/onboard-project`, `/gap-analysis`, `/research-ticket`, `/create-spec`, `/implement`, `/hipaa-check`, `/agent-audit`.
+Commands: `/setup-repo`, `/onboard-project`, `/gap-analysis`, `/research-ticket`, `/create-spec`, `/implement`, `/implement-batch`, `/hipaa-check`, `/agent-audit`.
 Use these exact names in all cross-references — never variants. Agent names are globally unique
 across the plugin suite; agents are launched by bare name regardless of which plugin ships them.
 
