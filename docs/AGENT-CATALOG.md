@@ -512,6 +512,7 @@ questions have an answer:
 - **A general PR-review agent.** v1 review capability is compliance-focused
   (`hipaa-compliance` via `/hipaa-check`) plus each implementer's own self-review; a
   general-purpose pull-request reviewer is a v2 candidate.
-- **Jira write-back.** All v1 Jira access is strictly read-only through the user's Atlassian
-  connector. Commenting on tickets, transitioning status, or linking issues from the pipeline
-  is a v2 candidate.
+- **Jira write-back.** Jira access is read-only with one exception shipped in 2.0.1: the
+  approval-gated cross-stack handoff comment `/implement` posts (developer approves the exact
+  text; posted via the developer's own connector). Broader write-back — transitioning status,
+  linking issues, or any unattended write — remains a v2 candidate.

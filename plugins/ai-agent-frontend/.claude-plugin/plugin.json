@@ -1,7 +1,7 @@
 {
   "name": "ai-agent-frontend",
   "description": "React/TypeScript implementer for the Thinkitive AI agent suite: the frontend-react agent and the react engineering-standards skill. Requires the ai-agent core plugin.",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "author": {
     "name": "CoThink AI"
   }

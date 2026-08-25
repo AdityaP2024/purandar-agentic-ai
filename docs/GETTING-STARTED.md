@@ -24,7 +24,9 @@ that does not resolve stops every command with instructions; nothing falls back 
   Jira access path, and it is per-user OAuth — no shared credentials, no stored tokens.
   - Needed for: `/research-ticket`, and `/create-spec` in inline mode (when no
     `docs/tickets/<KEY>/research.md` exists).
-  - NOT needed for: `/onboard-project`, `/implement`, or `/hipaa-check`. You can onboard a
+  - NOT needed for: `/onboard-project` or `/hipaa-check`, and `/implement` needs it only to
+    post the optional cross-stack handoff comment (without the connector it hands you the
+    comment text to paste yourself — implementation itself never touches Jira). You can onboard a
     project and implement approved specs without the connector.
 - **python3 on PATH** — OPTIONAL. Needed only by `/gap-analysis`, whose workbook extractor is
   python3 standard library alone (no packages to install); every other command runs without it.

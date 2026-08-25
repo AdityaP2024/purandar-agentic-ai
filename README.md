@@ -99,7 +99,11 @@ Per ticket:         [/research-ticket] -> /create-spec -> review spec -> /implem
 
 Human checkpoints: the developer approves the spec (spec approval gate), the
 implementation plan (plan gate), and reviews the final diff. Jira access is
-read-only; Figma access — used to read design frames behind Figma links — is
+read-only, with ONE approval-gated exception: after implementing one stack of a
+cross-stack ticket in the multi-repo topology, `/implement` drafts a handoff
+comment and — only on the developer's explicit approval of the exact text —
+posts it to the ticket via the developer's own Atlassian connector. Figma
+access — used to read design frames behind Figma links — is
 read-only through each developer's own Figma connector, and without it agents
 request exported frames instead of guessing. All generated artifacts are
 committed to the context repo — the code repo itself in single-repo mode, the
