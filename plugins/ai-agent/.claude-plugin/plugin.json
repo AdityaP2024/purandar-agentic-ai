@@ -1,7 +1,7 @@
 {
   "name": "ai-agent",
   "description": "Thinkitive AI agent suite — core: SRS onboarding, gap analysis, Jira ticket research, tech spec creation, HIPAA compliance review, and pipeline auditing. Pair with ai-agent-backend / ai-agent-frontend for implementation.",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "author": {
     "name": "CoThink AI"
   }

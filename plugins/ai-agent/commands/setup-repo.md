@@ -44,15 +44,28 @@ Rules that bind this command absolutely:
    twice (Backend, then Frontend) — the merge is additive; say so in the closing when relevant.
 
 3. **Ask where the project context lives** (code repos only — the Project Context repo IS the
-   context, skip this): "Where does the project context (the docs tree) live?" Options:
+   context, skip this). Detect first, then ask:
 
-   - **Sibling context repo (Recommended for multi-repo projects)** — writes the pointer;
-     suggested value `../project-context/docs` (the developer may give another path via Other;
-     it MUST be relative to this repo's root — absolute paths are machine-specific and
-     rejected).
-   - **This repo's own docs/ (single-repo mode)** — no pointer; everything behaves exactly as
-     it did before 2.0.0. If a pointer file already exists, offer to delete it (with its
-     current value shown) — otherwise it keeps winning.
+   a. **Detect candidates** (read-only — never write anything outside this repo). Probe the
+      conventional default `../project-context/docs`. If it does not exist, list this repo's
+      sibling directories (`ls ..`) and keep each one containing a `docs/` tree; rank first
+      any whose `docs/` holds `output-specs/` or `input-specs/` (the fingerprint of a suite
+      context repo). A candidate is offered as `../<sibling>/docs`.
+
+   b. **Ask** (AskUserQuestion): "Where does the project context (the docs tree) live?"
+      Options, in this order (drop what doesn't apply; never exceed 4 — the developer can
+      always type another path via Other, which MUST be relative to this repo's root:
+      absolute paths are machine-specific and rejected):
+
+      - **Each detected candidate by name** — e.g. `../context-myproject/docs` — the
+        top-ranked one marked (Recommended). Picking one writes the pointer with that value.
+      - **This repo's own docs/ (single-repo mode)** — no pointer; everything behaves exactly
+        as it did before 2.0.0. If a pointer file already exists, offer to delete it (with
+        its current value shown) — otherwise it keeps winning.
+      - **Context repo not available yet** — ask what path it WILL have (default
+        `../project-context/docs`); the pointer is written now with that value and the
+        closing carries the TODO from step 8. Step 8's question is skipped — the developer
+        already said the repo is missing.
 
 4. **Compute the target fragment.** Exact shapes (backend shown; frontend swaps the plugin id;
    the Project Context repo gets only the marketplace entry and the core enablement — no
@@ -134,19 +147,49 @@ Rules that bind this command absolutely:
    configured as {role} — nothing to change." and offer (AskUserQuestion) to reconfigure the
    role or pointer, or exit. Any change goes through the same diff-and-confirm.
 
-8. **Sibling existence check** (pointer mode). If the chosen contextRoot does not resolve to an
-   existing directory right now, WARN but still write the configuration:
+8. **Sibling existence check** (pointer mode). If the chosen contextRoot does not resolve to
+   an existing directory at write time, do not warn-and-proceed silently — ask
+   (AskUserQuestion), unless the developer already chose "Context repo not available yet" in
+   step 3 (then skip straight to writing, with the TODO below in the closing):
 
-   > Note: {contextRoot} does not exist yet. Clone the project-context repo as a sibling before
-   > running any pipeline command — they hard-stop on an unresolvable pointer.
+   - **Provide the correct path** — re-run the step 3 detection and question, then return to
+     the diff-and-confirm with the corrected value.
+   - **It's not ready yet — write the configuration anyway** — proceed; the closing then
+     carries this TODO verbatim:
 
-9. **Closing** (after a successful write; substitute per repo type):
+   > TODO: clone or create the project-context repo at {contextRoot}. Until it exists, every
+   > pipeline command stops with a pointer error — setup itself never needs rerunning; the
+   > same pointer starts resolving the moment the repo is in place.
+
+9. **Closing** (after a successful write). Print the common block, then EXACTLY ONE of the
+   three role branches — pick by what was just configured, never mix or blend them:
+
+   Common block:
 
    > Setup complete. Review and commit .claude/settings.json{ and .claude/ai-agent.json} — the
    > developer commits, the plugin never does. Then START A FRESH SESSION: plugin enablement,
    > permissions, and hooks are read at session start.
-   > {Project Context repo: the SessionStart hook will scaffold docs/input-specs/ and
-   > docs/output-specs/ on that first fresh session — drop the SRS, MOMs, and design links in
-   > and run /onboard-project. | Pointer mode: no docs directories are created in this repo —
-   > they live in the context repo. Reads from it never prompt; writes into it follow your
-   > permission mode (prompted per edit by default, automatic in acceptEdits mode).}
+
+   - **Project Context repo:**
+
+     > The SessionStart hook will scaffold docs/input-specs/ and docs/output-specs/ on that
+     > first fresh session — drop the SRS, MOMs, and design links in and run /onboard-project,
+     > then /gap-analysis when the user-story workbooks arrive.
+
+   - **Code repo, pointer mode (Backend or Frontend):**
+
+     > No docs directories are created in this repo — the brief, tickets, and decision log
+     > live in {contextRoot} and are maintained by that repo's owner via /onboard-project and
+     > /gap-analysis; you never run those here. Your workflow: /research-ticket →
+     > /create-spec → /implement (or /implement-batch for several ready tickets at once).
+     > Reads from the context repo never prompt; writes into it follow your permission mode
+     > (prompted per edit by default, automatic in acceptEdits mode).
+
+     If the contextRoot does not exist yet, append the step 8 TODO block.
+
+   - **Code repo, single-repo mode (no pointer):**
+
+     > This repo is its own project context: the SessionStart hook scaffolds docs/input-specs/
+     > and docs/output-specs/ on the first fresh session. Drop the SRS and MOMs in and run
+     > /onboard-project (then /gap-analysis when the workbooks arrive) before the development
+     > commands /research-ticket → /create-spec → /implement.

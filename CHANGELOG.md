@@ -4,6 +4,30 @@ All notable changes to the purandar-ai plugin suite. Versioning follows semver v
 each plugin's `.claude-plugin/plugin.json` — the three plugins version in lockstep;
 consuming projects pick up releases with `/plugin marketplace update`.
 
+## 2.1.1 — 2026-09-03
+
+### /setup-repo: context-repo detection and role-correct closings
+- **Step 3 now detects before it asks**: for code repos it probes the conventional
+  `../project-context/docs` and, when absent, scans the sibling directories for a `docs/` tree
+  (ranking ones with `output-specs/`/`input-specs/` first) and offers each detected candidate
+  by name as a selectable answer — a renamed context repo no longer requires typing its path
+  by hand. New explicit option **"Context repo not available yet"**: the pointer is written now
+  with the path the repo will have.
+- **Step 8 asks instead of warn-and-proceed**: an unresolvable contextRoot at write time now
+  offers "provide the correct path" (re-runs detection) or "not ready yet — write anyway",
+  the latter closing with an explicit TODO (clone it at {path}; pipeline commands stop with a
+  pointer error until then; setup itself never needs rerunning).
+- **Step 9 closing rewritten as three exhaustive, role-correct branches** — Project Context /
+  code repo pointer mode / code repo single-repo mode. Fixes the defect where a Backend repo
+  setup could close with the Project Context repo's "drop the SRS in and run /onboard-project"
+  message. Pointer-mode code repos are now told their actual next steps (/research-ticket →
+  /create-spec → /implement or /implement-batch) and that onboarding/gap-analysis belong to
+  the context repo's owner and are never run here.
+- **docs/GETTING-STARTED.md**: new "Who runs what" paragraph in the Topologies section
+  (context-repo owner runs /onboard-project + /gap-analysis; BE/FE developers start at
+  /research-ticket); Step 0 walkthrough updated for the detection flow.
+- No contract, hook, agent, or behavior-at-runtime changes — messaging and setup-flow only.
+
 ## 2.1.0 — 2026-08-25
 
 ### New command: /implement-batch — parallel ticket implementation in git worktrees
