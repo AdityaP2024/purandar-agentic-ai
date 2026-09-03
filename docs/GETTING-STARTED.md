@@ -15,6 +15,12 @@ file `.claude/ai-agent.json` (`{"contextRoot": "../project-context/docs"}`). Eve
 in this guide then means "under the context root" — that is the whole difference. A pointer
 that does not resolve stops every command with instructions; nothing falls back silently.
 
+**Who runs what.** In the multi-repo topology the context repo's owner runs `/onboard-project`
+and `/gap-analysis`; backend and frontend developers never do — their workflow starts at
+`/research-ticket` → `/create-spec` → `/implement` (or `/implement-batch`), reading the shared
+brief and decision log through the pointer. In single-repo mode one person wears both hats and
+runs everything locally.
+
 ## 1. Prerequisites
 
 - **Claude Code installed** and working in your terminal.
@@ -51,9 +57,11 @@ Install the marketplace and core plugin once on your machine:
 ```
 
 Then, in each repo, run `/setup-repo`. It asks which role the repo plays — **Backend**,
-**Frontend**, or **Project Context** — and, for code repos, where the project context lives
-(sibling context repo, or this repo's own `docs/` in single-repo mode). It shows you the exact
-settings diff, and on your confirmation merges the marketplace, the right `enabledPlugins`,
+**Frontend**, or **Project Context** — and, for code repos, where the project context lives:
+it scans the sibling directories and offers any detected context repo by name (whatever it is
+called), alongside this repo's own `docs/` (single-repo mode) and "not available yet" (the
+pointer is written now with a TODO; nothing needs rerunning once the repo appears). It shows
+you the exact settings diff, and on your confirmation merges the marketplace, the right `enabledPlugins`,
 the sibling-directory permission, and the context pointer into `.claude/settings.json` /
 `.claude/ai-agent.json` — never touching keys it does not own. Review, commit, and start a
 fresh session. That is the whole setup.

@@ -166,7 +166,9 @@ point it at the project-context repo(s), where the trend file lives.
    the file(s) it writes. That is the whole setup: it merges the marketplace,
    the right `enabledPlugins` for the repo's role, the sibling-directory
    permission, and — for code repos in the multi-repo topology — the context
-   pointer.
+   pointer. It scans the sibling directories and offers any detected context
+   repo by name, whatever it is called; a context repo that doesn't exist yet
+   is fine too (the pointer is written now, with a TODO to clone it).
 
 ### Everyone else
 
