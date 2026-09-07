@@ -216,9 +216,13 @@ Authored for the ai-agent plugin v1.0.0, 2026-07-21.
 ### What it knows
 
 - Skills: `shared-standards`, `hipaa` (client-side PHI surfaces: console output, browser
-  storage, URLs and route params, analytics, error reporting, fixtures), and `react` (stack
-  discovery, state ownership, Section 5 contract fidelity, component quality, TypeScript,
-  accessibility, testing).
+  storage, URLs and route params, analytics, error reporting, fixtures), and `react` — a ROUTER
+  card carrying twelve always-on rules plus a routing table over twelve on-demand reference
+  files (`skills/react/references/`): theme and design tokens, state ownership and persistence,
+  async and race conditions, forms and API contract, error handling, responsiveness,
+  accessibility and keyboard, performance, code quality and data structures, testing,
+  cross-browser, and permission gating/security. The agent reads only the reference files whose
+  triggers match the ticket, and names them in its plan-gate report.
 - Inputs it consumes: the approved tech spec at `docs/tickets/<KEY>/tech-spec.md` (Section 5
   verbatim), `docs/tickets/<KEY>/research.md` for visually-recorded UI intent,
   `PROJECT_BRIEF.md`, and `docs/decisions.md`.

@@ -4,6 +4,180 @@ All notable changes to the purandar-ai plugin suite. Versioning follows semver v
 each plugin's `.claude-plugin/plugin.json` — the three plugins version in lockstep;
 consuming projects pick up releases with `/plugin marketplace update`.
 
+## 2.3.1 — 2026-09-05
+
+### react skill: portability fixes — rules no longer assume infrastructure a project may lack
+
+2.3.0's rules were frequently written as "through the project's X" — a field wrapper, a response
+envelope, a theme object, a contract-test tier, an error reporter. That phrasing reads as *X
+exists*, so in a project shaped differently the agent could treat a normal absence as a gap to
+fill, and build framework inside a feature ticket. This release makes absence an explicit, valid
+branch everywhere it applies.
+
+**Seven rules hedged in the reference files:**
+
+| Rule | Was | Now |
+|---|---|---|
+| Field wrapper | "Every field goes through the project's field wrapper" | Where one exists, use it; otherwise wire label + error + association directly, and raise the wrapper as a plan-gate observation |
+| Response envelope | "Unwrap a response envelope once, in the seam" | Only where the backend wraps responses — an API returning bare payloads needs no layer |
+| Theme singleton | "Theme is a module singleton" | Only where the project constructs a runtime theme object; CSS-custom-property and utility-class projects have none and need none |
+| Contract tests | "Contract tests lock a primitive's prop API" | Where the project has that convention; otherwise an ordinary behavior test covering the same variants suffices — do not introduce a new test tier |
+| Error reporting | "Errors reach a reporting destination" | Where the project has one; **error tracking is never added by a feature ticket** |
+| Promotion threshold | "Promote at the second or third consumer" | A judgment call once there are two or three real consumers, not a threshold applied mechanically |
+| Shared primitives in the main bundle | stated as always true | Only for a primitive genuinely used by most routes; check actual usage rather than assuming a shared folder means shared use |
+
+**Five more in the router card:**
+- **Rule 4 (state ownership)** — where the project has no cache layer or form library, the outcome still holds: one owner per piece of state, no second copy that can drift.
+- **Rule 9 (assemble, never fork)** — where no shared primitive exists for what is needed, build the screen plainly and note the candidate; **do not build a framework inside a feature ticket**.
+- **Three checklist lines** (transport seam, registries, error reporting) reworded so they pass in a project that lacks the infrastructure.
+
+**One new universal principle**, so this generalizes beyond the twelve cases above:
+
+> Where the project HAS the named infrastructure, use it; bypassing it is a finding. Where it does
+> NOT, the rule still names an **outcome** — achieve it with what the project already has, and name
+> the missing piece as an observation. Building the infrastructure itself inside a feature ticket
+> is scope creep and a finding.
+
+Plus a conflict rule: where an outcome and an existing convention appear to clash, **the convention
+wins for _how_ and the outcome still holds for _what_** — and if both genuinely cannot hold, that
+is a conflict to surface, not to resolve silently.
+
+**Deliberately not hedged**, because they are outcome rules that hold on any architecture: race-condition guards, keyboard operability, loading/empty/error states, no-literals-where-a-token-exists, and behavior-over-implementation testing.
+
+- Content-only release: no structural, hook, command, template, or contract changes.
+
+## 2.3.0 — 2026-09-05
+
+### react skill: router + on-demand reference files (progressive disclosure)
+
+2.2.0 put the full frontend standard in one 600-line `SKILL.md`, which loaded in full on every
+frontend run. Claude Code's guidance is that a skill over ~500 lines should split into a router
+plus supporting files that load only when referenced. This release does that, and closes the
+coverage gaps 2.2.0 left open.
+
+**Structure.** `SKILL.md` is now a ~180-line router carrying a routing table, twelve always-on
+rules, and the Self-Review Checklist. Twelve reference files under `skills/react/references/`
+hold the detail and are read on demand:
+
+`theme-and-tokens` · `state-and-persistence` · `async-and-data` · `forms-and-contract` ·
+`error-handling` · `responsiveness` · `accessibility` · `performance` · `code-quality` ·
+`testing` · `cross-browser` · `security-and-gating`
+
+**Token cost per run** — the point of the change:
+
+| Run | Loaded |
+|---|---|
+| 2.2.0, any task | ~11,300 tokens (whole card, always) |
+| 2.3.0, styling-only change | ~4,200 tokens (router + 1 file) |
+| 2.3.0, typical data screen with a form | ~9,700 tokens (router + 6 files) |
+| 2.3.0, worst case (every file) | ~16,800 tokens |
+
+The common cases get cheaper and the detail gets deeper; only a task genuinely touching every
+area pays more than before.
+
+**New coverage (the gaps 2.2.0 missed):**
+- **Race conditions and cancellation** — the out-of-order response bug (type `ann` then `anna`,
+  the `ann` response lands last and wins), its three correct fixes, and the rule that no async
+  resolution may write state without a cache key, a cancellation, or a freshness guard. Promoted
+  to an always-on rule; also a required test scenario.
+- **Concurrent rendering** — `useDeferredValue` / `useTransition` guidance, with the warning that
+  they change scheduling, not the amount of work, and must never wrap an urgent input update.
+- **Web Vitals** — LCP / INP / CLS / scroll-fps targets, and the rule that a performance claim
+  without a measurement is a finding.
+- **`prefers-reduced-motion`** — a WCAG requirement absent from 2.2.0's 13 standards.
+- **Error reporting** — errors reach a reporting destination, sensitive fields stripped; source
+  maps emitted but not referenced by shipped JS.
+- **Polling and real-time** — interval discipline, stop-when-hidden, reconnect with backoff,
+  writes through the cache layer.
+- **File upload** — pre-validation, per-file progress, partial failure, per-request timeout.
+- **Focus management gaps** — focus on route change, and focus when the focused element is
+  removed (never stranded on `body`).
+- **Client-side security** — unsanitized HTML, secrets in the bundle, CSP, hosted payment
+  elements, idle timeout, dependency audits.
+- **Multi-tenant / multi-context isolation** — one source of truth, one injection point, clear
+  the cache on any context change, fail loud on a missing context.
+- **Effects discipline** — effects synchronize with the outside world; deriving state in an
+  effect is a finding.
+
+**Explicit anti-scope-creep rule.** A new always-on rule states that a capability the project has
+deliberately not adopted — internationalization in an English-only product, dark mode in a
+single-theme product, offline support in an always-connected tool — is NOT added because this
+card mentions it. Discover what the project does and match it; an unrequested capability is a
+finding. This directly answers the risk of a broader standard pushing unwanted work.
+
+### frontend-react agent
+- **Phase 2** now walks the routing table and reads only the reference files whose triggers match
+  the ticket, naming them in the plan-gate report so the developer sees which standards the run is
+  held to.
+- **Phase 6** checks the skill's Self-Review Checklist, re-reading each reference file relevant to
+  what the run touched.
+- Skill-load description rewritten for the router structure.
+
+- No hook, command, template, or contract changes; no behavior change for backend work.
+
+## 2.2.0 — 2026-09-05
+
+### react skill: production-grade frontend coverage (177 -> 600 lines)
+
+The `react` engineering-standards skill grew from a focused card into a full frontend
+foundation, so the `frontend-react` agent applies responsiveness, theming, accessibility,
+persistence and error-handling rules by default instead of only when a spec names them.
+Distilled from a production React/TypeScript design system; every project-specific fact
+(library names, versions, brand values, directory layouts) was deliberately excluded — the
+card still pins nothing and discovers everything.
+
+**New sections (7):**
+- **Theme and Design Tokens** — every colour/spacing/radius/shadow/type/breakpoint from the
+  token source; no hex, no raw px, no magic numbers in screens; multiplying token scales;
+  semantic ramps over saturated mids; theme-layer styling; module-singleton theme; fluid type
+  with a 16px body floor; multi-theme token discipline.
+- **Config-Driven Registries** — routes, nav, permissions, statuses, icons, constants and PHI
+  rules declared once and read by screens; registry colours are token keys; unknown keys fail
+  soft; semantic icon indirection; copy beside what it names.
+- **Config-Driven Primitives** — assemble from config + props, never fork per screen; identity
+  vs state split; capabilities enabled by presence of their data, never by a boolean flag.
+- **State Persistence and Refresh-Safety** — the three tiers (path / query / local ergonomics);
+  one shared URL-state primitive; omit defaults, replace-not-push, reset page on filter change,
+  same-write clearing of deeper params, coerce-and-fall-back; storage always wrapped, versioned
+  and purged on context switch; history-back over hardcoded paths.
+- **Data Structures and Algorithms** — match the structure to the hot operation; named
+  algorithms over nested conditionals; fresh containers on write; explicit don't-over-engineer
+  guidance.
+- **Error Handling** — error boundaries at two levels; one typed error mapper (transport before
+  status, retry 5xx/network only, single-flight refresh); a catch never names a cause it did not
+  check; toast-vs-screen map; the four loading rules; offline as a state; mock and real layers
+  rejecting identically so error paths survive integration.
+- **Cross-Browser Compatibility** — support matrix as contract; sticky, overscroll, virtualized
+  height, focus-visible, viewport units, zoom, high-DPI, and the rounded-input autofill fix.
+
+**Substantially expanded:**
+- **Responsiveness** — promoted from one bullet to a full section: the no-break table, the
+  bounded-box `min-height: 0` chain, structural swaps vs styling, mobile chrome behaviours,
+  equal-height grids, and a layout definition-of-done.
+- **Accessibility and Keyboard** — from three bullets to the 13 standards plus ARIA patterns
+  and focus management.
+- **Testing** — added contract tests for silent ordering rules, type-checked test files,
+  environment-stub semantics, and a scenario-coverage catalog (list / form / detail / hook /
+  utility / cross-cutting) on the principle that line coverage is not scenario coverage.
+- **Permission Gating**, **Forms**, **Date/Time**, **Performance** — new dedicated sections.
+- **Discover the Stack First** — six new discovery rows (tokens, breakpoints, icons, datetime,
+  lint constraints) plus monorepo dependency-isolation.
+- **Component Quality / TypeScript** — decomposition destinations over raising limits;
+  memoization prerequisites; narrow subscriptions; type-level invariants; strict-index handling.
+
+**Key Conventions Summary: 17 -> 54 rows.** This table is what the agent's Phase 6 self-review
+runs against, so every new rule is mechanically checked rather than merely read. All 17 original
+rows are preserved verbatim in meaning.
+
+### frontend-react agent
+- Phase 4 implementation rules widened to reach the new sections: responsiveness now names the
+  no-break rules and bounded-box chain; accessibility names the 13 standards; state ownership
+  gained the persistence tier; two new items cover design tokens/registries and named error
+  surfaces. List renumbered 1-15.
+- Skill-load description updated to list the skill's full section set.
+
+- No hook, command, template, or contract changes; no behavior change for backend work.
+
 ## 2.1.1 — 2026-09-03
 
 ### /setup-repo: context-repo detection and role-correct closings

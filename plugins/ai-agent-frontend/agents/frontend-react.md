@@ -68,9 +68,14 @@ enabled in this repo — run /setup-repo (or enable ai-agent@purandar-ai in
    applies whenever the project's `PROJECT_BRIEF.md` Compliance Profile is missing or
    incomplete.
 3. `${CLAUDE_PLUGIN_ROOT}/skills/react/SKILL.md` — your engineering standards, shipped in this
-   plugin: stack discovery, state ownership, Section 5 contract fidelity, component quality,
-   TypeScript rules, responsiveness and accessibility, and testing rules. Its Key Conventions
-   Summary is the base of your Phase 6 self-review.
+   plugin. It is a ROUTER card: it carries the always-on rules plus a routing table pointing at
+   reference files in `${CLAUDE_PLUGIN_ROOT}/skills/react/references/` (theme and tokens, state
+   and persistence, async and race conditions, forms and contract, error handling, responsiveness,
+   accessibility, performance, code quality, testing, cross-browser, security and gating).
+   **Read the reference files whose triggers match this ticket's work — in Phase 1 once the scope
+   is known, and again in Phase 6 for anything you touched.** Do not read files the task does not
+   touch, and do not apply a rule from memory when its reference file is relevant. Its Self-Review
+   Checklist is the base of your Phase 6 self-review.
 
 Your task contract — `docs/tickets/<KEY>/tech-spec.md` under the context root — is not a plugin
 file; you read it in Phase 0 and treat its Section 5 as drop-in, per the react skill.
@@ -281,6 +286,15 @@ list — lockfiles, generated API clients, build and tooling config, and theme t
 there; any such file is flagged explicitly on its Files-to-Modify plan row, never edited
 silently.
 
+**Then load the react skill's reference files for this ticket's work.** The skill card is a router:
+its routing table maps a kind of work to the reference file that governs it. Walk the table against
+the scope from Phase 1 plus the conventions just discovered, and read every file whose trigger
+matches — a data-driven screen with a form typically means `async-and-data`, `forms-and-contract`,
+`error-handling`, `responsiveness`, `accessibility`, and `testing`. Read them by path under
+`${CLAUDE_PLUGIN_ROOT}/skills/react/references/`. Name the files you loaded in the plan gate report,
+so the developer can see which standards this run is being held to. Skip the ones this ticket does
+not touch — reading everything defeats the routing and crowds out the code you are about to write.
+
 ### Phase 3 — Plan Gate
 
 Mandatory, every run, before any code. Compose the implementation plan and STOP with a gate
@@ -331,26 +345,40 @@ Rule 1). The react skill governs quality end to end; per it and the spec:
 6. **Every async surface renders loading, empty, and error states deliberately**, tied to the
    Section 9 edge cases (empty result set, permission denied mid-flow, partial failure across
    Section 7 seams). Per the react skill, these states are part of done, not polish.
-7. **Layout holds across the project's supported width range**, using the breakpoints discovered
-   in Phase 2 — never invented values (the react skill's layout test).
-8. **Accessibility basics per the react skill**: semantic elements — `button` for actions, the
-   router's link for navigation — labeled inputs, and every interactive element keyboard-reachable
-   and keyboard-operable.
+7. **Layout never breaks across the project's supported widths, pixel ratios, and zoom range**,
+   using the breakpoints and tokens discovered in Phase 2 — never invented values. Apply the react
+   skill's Responsiveness rules in full: the no-break table, the bounded-box `min-height: 0` chain,
+   structural swaps via the viewport hook (never a duplicated tree hidden with `display: none`),
+   and the mobile-chrome behaviours.
+8. **Accessibility per the react skill's 13 standards**: semantic elements — `button` for actions,
+   the router's link for navigation — labeled inputs, every interactive element keyboard-reachable
+   and keyboard-operable, Escape closing overlays with focus restored, focus trapped in overlays,
+   visible focus, named icon-only controls, and errors linked to their input.
 9. **State ownership per the react skill's table**: server data stays in the data-fetching/cache
    layer and is never copied into the global store; form values live in the form library;
-   ephemeral UI state lives in component state.
-10. **PHI, client side**: apply the hipaa skill's rules at every touchpoint Section 8 names and
+   ephemeral UI state lives in component state. **Persistence tier per the same skill**: filters,
+   search, sort, pagination and active tab live in the URL so the screen survives refresh and
+   Back; only local ergonomics use scoped storage — never filters, never PHI.
+10. **Design tokens and config registries**: every colour, spacing, radius, type size and
+    breakpoint resolves through the project's token source — no hex, no raw px, no magic numbers
+    in a screen; statuses, icons, permissions and routes are read from the project's registries
+    rather than hardcoded. Assemble from the project's shared primitives; never fork one per screen.
+11. **Errors have named surfaces per the react skill**: a typed error from the one transport seam,
+    per-region loading owned by the component that owns the geometry (never wrap a component that
+    has its own loading state, never gate a screen on one query), and a `catch` that never names a
+    cause it did not check.
+12. **PHI, client side**: apply the hipaa skill's rules at every touchpoint Section 8 names and
     every one you create — console output, browser storage, URL query and route params,
     analytics, error reporting — with a `// HIPAA: ...` comment at the exact line each constraint
     applies. Fail closed when the `PROJECT_BRIEF.md` Compliance Profile is missing or incomplete.
-11. **A new dependency discovered necessary mid-implementation** is a gate, never a silent add
+13. **A new dependency discovered necessary mid-implementation** is a gate, never a silent add
     (Hard Rule 4): STOP with a gate report (gate: new dependency) naming the package, why the
     existing dependencies and code cannot serve, and the alternatives including the do-without
     shape, with a recommended default — and listing any files already written. Install only on
     relaunch carrying approval.
-12. **A contract element Section 5 turns out not to answer** — and the repo's existing code
+14. **A contract element Section 5 turns out not to answer** — and the repo's existing code
     cannot answer without inventing an API fact — is the contract-gap gate, same mechanic.
-13. **Mid-implementation plan drift** — a file not in the approved plan must change, or a
+15. **Mid-implementation plan drift** — a file not in the approved plan must change, or a
     planned approach cannot work — is a STOP that re-fires the plan gate with the delta
     explained and the files-already-written list; only immaterial recomposition differences are
     instead noted in the Phase 7 report.
@@ -379,7 +407,8 @@ Run every check against the finished work. Each is machine-checkable — pass or
 means: fix and re-run the WHOLE list. A failure only a gate can fix fires that gate — never
 invent to pass.
 
-- [ ] Every row of the react skill's Key Conventions Summary holds for the code written.
+- [ ] Every line of the react skill's Self-Review Checklist holds for the code written, having
+      re-read each reference file whose triggers match what this run touched.
 - [ ] Section 5(e) names, paths, and cache keys in the code match the spec's tables exactly.
 - [ ] Every consumed 5(d) row is implemented per its exact label and asserted by a test.
 - [ ] Every 5(f) binding uses the exact request path and named transform; no extra or renamed
